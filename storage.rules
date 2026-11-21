@@ -1,0 +1,11 @@
+rules_version = '2';
+// الصور (صور الأصناف وشعار المحل) تُرفع من الخادم وتُقرأ عامة عبر روابطها.
+// الكتابة من المتصفح ممنوعة تمامًا.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}

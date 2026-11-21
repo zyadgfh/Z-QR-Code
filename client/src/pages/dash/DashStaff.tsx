@@ -1,0 +1,87 @@
+import { useCallback, useEffect, useState } from 'react';
+import { api } from '../../lib/api';
+import { dashT, fmtDate } from '../../lib/i18n';
+import { useDashLang } from '../../stores/dashlang';
+import { Btn, Err, Field, Input, Spinner } from '../../components/ui';
+
+type Staff = { id: string; email: string; created_at: number };
+
+export default function DashStaff() {
+  const { lang } = useDashLang();
+  const t = dashT(lang);
+  const [staff, setStaff] = useState<Staff[] | null>(null);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const load = useCallback(async () => {
+    try {
+      setStaff(await api<Staff[]>('/api/shop/staff'));
+    } catch (e: any) {
+      setError(e.message);
+    }
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const add = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      await api('/api/shop/staff', { method: 'POST', body: { email, password } });
+      setEmail('');
+      setPassword('');
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+    setBusy(false);
+  };
+
+  const remove = async (id: string) => {
+    if (!confirm(t('confirmDelete'))) return;
+    try {
+      await api(`/api/shop/staff/${id}`, { method: 'DELETE' });
+      await load();
+    } catch (e: any) {
+      setError(e.message);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-3xl bg-white p-5 shadow-sm">
+        <h3 className="mb-3 text-sm font-black text-stone-400">👥 {t('staffAdd')}</h3>
+        <div className="flex flex-wrap items-end gap-3">
+          <div className="min-w-48 flex-1"><Field label={t('staffEmail')}><Input dir="ltr" type="email" value={email} onChange={(e) => setEmail(e.target.value)} /></Field></div>
+          <div className="w-44"><Field label={t('staffPassword')}><Input dir="ltr" type="password" value={password} onChange={(e) => setPassword(e.target.value)} /></Field></div>
+          <Btn onClick={add} disabled={busy || !email || password.length < 6}>＋ {t('staffAdd')}</Btn>
+        </div>
+        <p className="mt-2 text-[11px] font-bold text-stone-400">ℹ️ {t('staffNote')}</p>
+        {error && <Err error={error} />}
+      </div>
+
+      <div className="rounded-3xl bg-white p-3 shadow-sm">
+        {!staff ? (
+          <Spinner label={t('loading')} />
+        ) : staff.length === 0 ? (
+          <p className="p-4 text-center text-sm font-bold text-stone-400">{t('staffEmpty')}</p>
+        ) : (
+          staff.map((s) => (
+            <div key={s.id} className="flex items-center gap-3 border-b border-stone-100 px-3 py-2.5 last:border-0">
+              <span className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-100 text-xs font-black text-stone-500">👤</span>
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-bold text-stone-700" dir="ltr">{s.email}</p>
+                <p className="text-[11px] text-stone-400">{fmtDate(lang, s.created_at)}</p>
+              </div>
+              <button onClick={() => remove(s.id)} className="rounded-lg px-2 py-1 text-xs font-bold text-red-500 hover:bg-red-50">✕ {t('delete')}</button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}

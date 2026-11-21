@@ -1,0 +1,9 @@
+{
+  "name": "qr-menu-server",
+  "private": true,
+  "version": "0.1.0",
+  "dependencies": {
+    "express": "^4.21.2",
+    "firebase-admin": "^12.7.0"
+  }
+}
