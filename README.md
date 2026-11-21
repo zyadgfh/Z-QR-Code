@@ -102,6 +102,9 @@ npm test
    DB_ADAPTER=firestore FIREBASE_SERVICE_ACCOUNT_B64=... npm run seed
    ```
    أو أنشئ أول محل من لوحة `/admin` مباشرة (هذا هو المسار الطبيعي — التسجيل ذاتي غير مفعّل بقرار من المالك).
+8. **التحقق بعد النشر:** افتح `/api/health` — النجاح يعني `{"ok":true,"adapter":"firestore"}`، وأي مشكلة ستعيد رسالة عربية تخبرك بالضبط بالناقص (Firestore غير مُفعّل / بيانات الـ service account غير صحيحة).
+
+> ملاحظات: كونفيج الويب (`firebaseConfig` بأسماء `apiKey`/`authDomain`…) هو إعداد تطبيق العميل و**لا يُستخدم** في بنيتنا — كل الاتصال من الخادم عبر الـ service account. المشاريع الجديدة اسم bucket فيها يظهر بصيغة `<project>.firebasestorage.app` — ضعه كما هو في `FIREBASE_STORAGE_BUCKET`.
 
 ---
 

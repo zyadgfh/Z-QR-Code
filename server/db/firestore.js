@@ -67,6 +67,22 @@ class FirestoreDB {
     });
     return `https://storage.googleapis.com/${this._bucketName}/${path}`;
   }
+
+  /** فحص جاهزية الاتصال — يُستخدم في /api/health ويقول بالضبط ما الناقص */
+  async ping() {
+    try {
+      await this.db.collection('platform_settings').doc('__ping').get();
+      return { ok: true };
+    } catch (err) {
+      const code = err && err.code;
+      let error = `تعذر الاتصال بـ Firestore (${code || 'خطأ غير معروف'}) — راجع إعدادات المشروع`;
+      if (code === 5)
+        error = 'Firestore غير مُفعّل في مشروع Firebase — فعّله من اللوحة: Firestore Database → Create database (Native mode)';
+      else if (code === 7 || code === 16)
+        error = 'بيانات الـ service account غير صحيحة أو لا تملك صلاحية — أعد توليد المفتاح وتأكد من صلاحياته';
+      return { ok: false, error };
+    }
+  }
 }
 
 module.exports = { FirestoreDB };

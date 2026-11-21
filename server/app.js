@@ -3,7 +3,7 @@
 const express = require('express');
 const { createDB } = require('./db');
 const { seedDemo } = require('./seed');
-const { HttpError } = require('./lib/errors');
+const { HttpError, h } = require('./lib/errors');
 
 const authRoutes = require('./routes/auth');
 const publicRoutes = require('./routes/public');
@@ -47,7 +47,15 @@ function createApp(opts = {}) {
 
   const ctx = { db, env };
 
-  app.get('/api/health', (req, res) => res.json({ ok: true, adapter: db.kind }));
+  app.get(
+    '/api/health',
+    h(async (req, res) => {
+      const ping = await db.ping();
+      const body = { ok: ping.ok, adapter: db.kind };
+      if (!ping.ok) body.error = ping.error;
+      res.status(ping.ok ? 200 : 503).json(body);
+    })
+  );
 
   // تقديم الصور المرفوعة في وضع الذاكرة (في Firestore تُقدَّم من Firebase Storage مباشرة)
   app.get('/api/files/:id', (req, res) => {
