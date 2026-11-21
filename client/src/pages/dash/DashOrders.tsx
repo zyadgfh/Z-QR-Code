@@ -5,6 +5,7 @@ import { dashT, timeAgo } from '../../lib/i18n';
 import { useDashLang } from '../../stores/dashlang';
 import { alertBeep, ensureAudio } from '../../lib/sound';
 import { Btn, Err, Input, Label, Modal, Spinner } from '../../components/ui';
+import { staggerCards } from '../../lib/anim';
 
 type OrderItem = {
   item_id: string;
@@ -37,11 +38,21 @@ export default function DashOrders() {
   const [now, setNow] = useState(Date.now());
   const [accepting, setAccepting] = useState<Order | null>(null);
   const [eta, setEta] = useState(15);
+  const listRef = useRef<HTMLDivElement>(null);
+  const lastCount = useRef<number | null>(null);
 
   // الصوت: مفعّل بعد أول لمسة، ومحفوظ لزيارات لاحقة
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem('qm-sound') === '1');
   const pendingCount = useMemo(() => orders?.filter((o) => o.status === 'pending').length ?? 0, [orders]);
   const prevPending = useRef<number | null>(null);
+
+  // دخول متدرج للبطاقات عند أول تحميل وكل وصول دفعة طلبات جديدة
+  useEffect(() => {
+    if (orders && orders.length && orders.length !== lastCount.current) {
+      lastCount.current = orders.length;
+      staggerCards(listRef.current);
+    }
+  }, [orders]);
 
   const load = useCallback(async () => {
     try {
@@ -95,7 +106,7 @@ export default function DashOrders() {
   const done = orders.filter((o) => o.status === 'done').slice(0, 8);
 
   return (
-    <div className="space-y-4">
+    <div ref={listRef} className="space-y-4">
       {/* شريط الحالة */}
       <div className="flex flex-wrap items-center gap-2">
         <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-stone-600 shadow-sm">
@@ -170,9 +181,9 @@ export default function DashOrders() {
 }
 
 const TONES: Record<string, string> = {
-  red: 'border-red-200 bg-red-50/60',
-  sky: 'border-sky-200 bg-sky-50/60',
-  green: 'border-green-200 bg-green-50/60',
+  red: '!border-red-200 !bg-red-50/70',
+  sky: '!border-sky-200 !bg-sky-50/70',
+  green: '!border-green-200 !bg-green-50/70',
 };
 
 function Group({
@@ -225,7 +236,7 @@ function OrderCard({
   onStage?: (o: Order, stage: 'ready' | 'done') => void;
 }) {
   return (
-    <div className={`rounded-3xl border p-4 shadow-sm ${tone ? TONES[tone] : 'border-stone-200 bg-white'}`}>
+    <div data-card className={`rounded-3xl border border-black/[0.04] bg-white p-4 shadow-apple ${tone ? TONES[tone] : ''}`}>
       <div className="mb-2 flex items-center gap-2">
         <span className="rounded-full bg-stone-800 px-3 py-1 text-xs font-black text-white">{t('table')} {o.table_number}</span>
         <span className="text-xs font-bold text-stone-400">{t('minAgo')} {Math.max(1, Math.floor((now - o.created_at) / 60000))} {t('min')}</span>

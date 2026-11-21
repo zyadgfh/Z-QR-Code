@@ -10,9 +10,36 @@ html {
 
 body {
   font-family: var(--font-sans);
-  background-color: #f5f5f4;
-  color: #1c1917;
+  /* رمادي آبل المميز بدل الرمادي الدافئ */
+  background-color: #f5f5f7;
+  color: #1d1d1f;
   -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* عناوين بأسلوب آبل: تشديد طفيف ووزن ثقيل */
+h1, h2, h3 {
+  letter-spacing: -0.01em;
+}
+
+/* سطح زجاجي (iOS) — للهيدر الثابت والأشرطة العائمة */
+.glass {
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(20px) saturate(1.8);
+  -webkit-backdrop-filter: blur(20px) saturate(1.8);
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+/* سطح زجاجي أفتح للأشرطة العائمة */
+.glass-float {
+  background: rgba(255, 255, 255, 0.82);
+  backdrop-filter: blur(24px) saturate(1.8);
+  -webkit-backdrop-filter: blur(24px) saturate(1.8);
+}
+
+/* ظل آبل الناعم المميز */
+.shadow-apple {
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 /* الطباعة: صفحة أكواد QR */
@@ -26,5 +53,16 @@ body {
   .print-card {
     break-inside: avoid;
     page-break-inside: avoid;
+  }
+}
+
+/* احترام تفضيل تقليل الحركة */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }
