@@ -5,6 +5,7 @@ import { useDashLang } from '../../stores/dashlang';
 import { useAuth, Shop } from '../../stores/auth';
 import { compressImage } from '../../lib/img';
 import { Btn, Err, Field, Input, Ok, Select, Spinner, StatusChip } from '../../components/ui';
+import ChangePasswordCard from '../../components/ChangePassword';
 
 type Summary = {
   shop: Shop;
@@ -113,6 +114,8 @@ export default function DashSettings() {
           )}
         </div>
       </div>
+
+      <ChangePasswordCard />
     </div>
   );
 }
