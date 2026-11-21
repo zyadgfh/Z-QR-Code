@@ -70,13 +70,21 @@ class FirestoreDB {
 
   /** فحص جاهزية الاتصال — يُستخدم في /api/health ويقول بالضبط ما الناقص */
   async ping() {
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(Object.assign(new Error('deadline'), { code: 'TIMEOUT' })), 8000)
+    );
     try {
-      await this.db.collection('platform_settings').doc('__ping').get();
+      await Promise.race([
+        this.db.collection('platform_settings').doc('__ping').get(),
+        timeout,
+      ]);
       return { ok: true };
     } catch (err) {
       const code = err && err.code;
       let error = `تعذر الاتصال بـ Firestore (${code || 'خطأ غير معروف'}) — راجع إعدادات المشروع`;
-      if (code === 5)
+      if (code === 'TIMEOUT' || code === 14)
+        error = 'تعذر الوصول لخدمة Firestore خلال المهلة — غالبًا الشبكة تحجب googleapis.com أو المشروع غير موجود';
+      else if (code === 5)
         error = 'Firestore غير مُفعّل في مشروع Firebase — فعّله من اللوحة: Firestore Database → Create database (Native mode)';
       else if (code === 7 || code === 16)
         error = 'بيانات الـ service account غير صحيحة أو لا تملك صلاحية — أعد توليد المفتاح وتأكد من صلاحياته';
