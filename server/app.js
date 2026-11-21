@@ -26,7 +26,19 @@ function createApp(opts = {}) {
   app.disable('x-powered-by');
   app.set('trust proxy', 1); // خلف بروكسي Render/Vercel ليعمل req.ip
   app.set('qm_app_id', require('crypto').randomUUID()); // هوية النسخة لعزل عدّادات تحديد المعدل
-  app.use(express.json({ limit: '8mb' }));
+  app.use(express.json({ limit: '4mb' }));
+
+  // ترويسات أمان أساسية على كل الردود
+  app.use((req, res, next) => {
+    res.set('x-content-type-options', 'nosniff');
+    res.set('x-frame-options', 'SAMEORIGIN');
+    res.set('referrer-policy', 'strict-origin-when-cross-origin');
+    res.set('permissions-policy', 'camera=(), microphone=(), geolocation=()');
+    if (req.headers['x-forwarded-proto'] === 'https' || req.secure) {
+      res.set('strict-transport-security', 'max-age=31536000; includeSubDomains');
+    }
+    next();
+  });
 
   // CORS بسيط (يفيد فقط عند فصل الفرونت عن الباك على نطاقين)
   const corsOrigins = (env.CORS_ORIGIN || '')
@@ -79,6 +91,12 @@ function createApp(opts = {}) {
   app.use((err, req, res, next) => {
     if (err instanceof HttpError) {
       return res.status(err.status).json({ error: { code: err.code, message: err.message } });
+    }
+    if (err && (err.type === 'entity.too.large' || err.statusCode === 413)) {
+      return res.status(413).json({ error: { code: 'PAYLOAD_TOO_LARGE', message: 'حجم البيانات أكبر من المسموح (4MB)' } });
+    }
+    if (err && err.type === 'entity.parse.failed') {
+      return res.status(400).json({ error: { code: 'BAD_JSON', message: 'صيغة البيانات غير صحيحة' } });
     }
     console.error('[server error]', err);
     if (res.headersSent) return;

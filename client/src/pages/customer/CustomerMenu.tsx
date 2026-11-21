@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { custT, money, Lang } from '../../lib/i18n';
 import { useCart, CartLine, CartOption } from '../../stores/cart';
 import { Spinner } from '../../components/ui';
+import { revealSections, sheetIn, popIn } from '../../lib/anim';
 
 type Opt = { id: string; name: string; name_en: string | null; price_delta: number };
 type Group = { id: string; name: string; name_en: string | null; selection: 'single' | 'multi'; required: boolean; options: Opt[] };
@@ -37,6 +38,8 @@ export default function CustomerMenu() {
   const [activeOrder, setActiveOrder] = useState<string | null>(null);
   const [selected, setSelected] = useState<Item | null>(null);
 
+  const rootRef = useRef<HTMLDivElement>(null);
+
   const lang = (data?.shop?.menu_language || 'ar') as Lang;
   const t = custT(lang);
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
@@ -68,6 +71,11 @@ export default function CustomerMenu() {
       .catch(() => {});
   }, [slug, table]);
 
+  // حركات الظهور عند كل تحميل للمنيو
+  useEffect(() => {
+    if (data?.open) revealSections(rootRef.current);
+  }, [data]);
+
   if (notFound)
     return (
       <Center>
@@ -92,31 +100,31 @@ export default function CustomerMenu() {
   }
 
   return (
-    <div dir={dir} className="mx-auto min-h-dvh max-w-lg bg-stone-50 pb-28">
-      {/* الترويسة */}
-      <header className="sticky top-0 z-30 border-b border-stone-200 bg-white/95 backdrop-blur">
+    <div ref={rootRef} dir={dir} className="mx-auto min-h-dvh max-w-lg bg-[#f5f5f7] pb-28">
+      {/* الترويسة الزجاجية */}
+      <header className="glass sticky top-0 z-30">
         <div className="flex items-center gap-3 px-4 py-3">
           {data.shop?.logo_url ? (
-            <img src={data.shop.logo_url} alt="" className="h-11 w-11 rounded-full object-cover" />
+            <img src={data.shop.logo_url} alt="" className="h-11 w-11 rounded-full object-cover ring-1 ring-black/10" />
           ) : (
-            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-teal-700 text-lg font-black text-white">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-gradient-to-br from-teal-600 to-teal-800 text-lg font-black text-white shadow-apple">
               {(data.shop?.name || 'M').trim().charAt(0)}
             </div>
           )}
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-lg font-extrabold text-stone-800">{data.shop?.name}</h1>
-            <p className="text-xs text-stone-500">
+            <h1 className="truncate text-[17px] font-extrabold text-stone-900">{data.shop?.name}</h1>
+            <p className="text-xs font-semibold text-stone-500">
               {table ? `${t('table')} ${table}` : t('needTable')}
             </p>
           </div>
         </div>
-        {/* شرائح التصنيفات */}
+        {/* شرائح التصنيفات الزجاجية */}
         <nav className="flex gap-2 overflow-x-auto px-4 pb-2.5" style={{ scrollbarWidth: 'none' }}>
           {(data.categories || []).map((c, i) => (
             <a
               key={c.id}
               href={`#cat-${c.id}`}
-              className="shrink-0 rounded-full bg-stone-100 px-3.5 py-1.5 text-sm font-bold text-stone-700 hover:bg-teal-50 hover:text-teal-800"
+              className="shrink-0 rounded-full border border-black/5 bg-white/80 px-3.5 py-1.5 text-sm font-bold text-stone-700 shadow-sm backdrop-blur transition hover:bg-white hover:text-teal-800 active:scale-95"
             >
               {lang === 'en' && c.name_en ? c.name_en : c.name} <span className="text-stone-400">{EMOJIS[i % EMOJIS.length]}</span>
             </a>
@@ -128,7 +136,7 @@ export default function CustomerMenu() {
       {activeOrder && (
         <Link
           to={`/${slug}/o/${activeOrder}`}
-          className="mx-4 mt-3 flex items-center justify-between rounded-2xl bg-teal-600 px-4 py-3 text-sm font-bold text-white shadow"
+          className="mx-4 mt-3 flex items-center justify-between rounded-2xl bg-gradient-to-r from-teal-600 to-teal-700 px-4 py-3 text-sm font-bold text-white shadow-apple"
         >
           <span>🔔 {t('activeOrder')}</span>
           <span>›</span>
@@ -138,8 +146,8 @@ export default function CustomerMenu() {
       {/* الأصناف */}
       <main className="mt-2 space-y-6 px-4">
         {(data.categories || []).map((c) => (
-          <section key={c.id} id={`cat-${c.id}`} className="scroll-mt-32">
-            <h2 className="mb-2.5 text-base font-extrabold text-stone-800">
+          <section key={c.id} id={`cat-${c.id}`} data-reveal className="scroll-mt-32">
+            <h2 className="mb-2.5 text-[19px] font-extrabold tracking-tight text-stone-900">
               {lang === 'en' && c.name_en ? c.name_en : c.name}
             </h2>
             <div className="space-y-2.5">
@@ -147,17 +155,17 @@ export default function CustomerMenu() {
                 <button
                   key={it.id}
                   onClick={() => setSelected(it)}
-                  className="flex w-full items-center gap-3 rounded-2xl border border-stone-200 bg-white p-3 text-start shadow-sm transition active:scale-[0.99]"
+                  className="flex w-full items-center gap-3 rounded-[22px] border border-black/[0.04] bg-white p-3 text-start shadow-apple transition active:scale-[0.98]"
                 >
                   {it.photo_url ? (
-                    <img src={it.photo_url} alt="" loading="lazy" className="h-16 w-16 shrink-0 rounded-xl object-cover" />
+                    <img src={it.photo_url} alt="" loading="lazy" className="h-16 w-16 shrink-0 rounded-2xl object-cover" />
                   ) : (
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-stone-100 text-2xl">
+                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-2xl">
                       {EMOJIS[(data.categories || []).indexOf(c) % EMOJIS.length]}
                     </div>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate font-bold text-stone-800">{lang === 'en' && it.name_en ? it.name_en : it.name}</p>
+                    <p className="truncate font-bold text-stone-900">{lang === 'en' && it.name_en ? it.name_en : it.name}</p>
                     {it.description && <p className="mt-0.5 line-clamp-1 text-xs text-stone-500">{it.description}</p>}
                     <p className="mt-1 text-sm font-extrabold text-teal-700">{money(lang, it.price)}</p>
                   </div>
@@ -172,7 +180,7 @@ export default function CustomerMenu() {
         ))}
       </main>
 
-      {/* شريط السلة العائم */}
+      {/* شريط السلة العائم الزجاجي */}
       <CartBar slug={slug} table={table} lang={lang} onOpen={() => navigate(`/${slug}/cart${table ? `?t=${table}` : ''}`)} />
 
       {selected && (
@@ -190,21 +198,20 @@ export default function CustomerMenu() {
 }
 
 function Center({ children }: { children: React.ReactNode }) {
-  return <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-stone-50 p-6 text-center">{children}</div>;
+  return <div className="flex min-h-dvh flex-col items-center justify-center gap-2 bg-[#f5f5f7] p-6 text-center">{children}</div>;
 }
 
 export function Unavailable({ lang, name, logo, reason }: { lang: Lang; name: string; logo: string | null; reason?: string }) {
   const t = custT(lang);
   return (
-    <div dir={lang === 'ar' ? 'rtl' : 'ltr'} className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-stone-100 p-6 text-center">
+    <div dir={lang === 'ar' ? 'rtl' : 'ltr'} className="flex min-h-dvh flex-col items-center justify-center gap-3 bg-[#f5f5f7] p-6 text-center">
       {logo ? (
         <img src={logo} alt="" className="h-20 w-20 rounded-full object-cover opacity-60" />
       ) : (
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-stone-300 text-3xl">🍽️</div>
       )}
       <h1 className="text-xl font-extrabold text-stone-700">{name}</h1>
-      <p className="rounded-2xl bg-white px-5 py-4 text-lg font-bold text-stone-600 shadow-sm">{t('locked')}</p>
-      <p className="text-xs text-stone-400">{reason === 'locked' ? '' : ''}</p>
+      <p className="rounded-2xl bg-white px-5 py-4 text-lg font-bold text-stone-600 shadow-apple">{t('locked')}</p>
     </div>
   );
 }
@@ -223,17 +230,26 @@ function CartBar({
   const lines = useCart((s) => s.bySlug[slug] || []);
   const count = lines.reduce((s, l) => s + l.qty, 0);
   const total = lines.reduce((s, l) => s + l.qty * l.unit_price, 0);
+  const barRef = useRef<HTMLButtonElement>(null);
+  const wasVisible = useRef(false);
+
+  useEffect(() => {
+    if (count > 0 && !wasVisible.current) popIn(barRef.current);
+    wasVisible.current = count > 0;
+  }, [count]);
+
   if (count === 0) return null;
   return (
     <div className="fixed inset-x-0 bottom-0 z-40 mx-auto max-w-lg p-3">
       <button
+        ref={barRef}
         onClick={onOpen}
         disabled={!table}
-        className="flex w-full items-center justify-between rounded-2xl bg-teal-700 px-5 py-3.5 font-extrabold text-white shadow-xl transition hover:bg-teal-800 active:scale-[0.99] disabled:bg-stone-400"
+        className="glass-float flex w-full items-center justify-between rounded-[22px] border border-white/60 px-5 py-3.5 font-extrabold text-stone-900 shadow-apple transition hover:bg-white active:scale-[0.98] disabled:opacity-50"
       >
         <span className="flex items-center gap-2">
           🛒 {custT(lang)('viewCart')}
-          <span className="rounded-full bg-white/25 px-2 py-0.5 text-xs">{count}</span>
+          <span className="rounded-full bg-teal-700 px-2 py-0.5 text-xs text-white">{count}</span>
         </span>
         <span>{money(lang, Math.round(total * 100) / 100)}</span>
       </button>
@@ -258,6 +274,7 @@ function ItemSheet({
 }) {
   const t = custT(lang);
   const add = useCart((s) => s.add);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const [chosen, setChosen] = useState<Record<string, string[]>>(() => {
     const init: Record<string, string[]> = {};
     for (const g of item.groups) if (g.required && g.selection === 'single') init[g.id] = [g.options[0]?.id].filter(Boolean) as string[];
@@ -265,6 +282,10 @@ function ItemSheet({
   });
   const [qty, setQty] = useState(1);
   const [added, setAdded] = useState(false);
+
+  useEffect(() => {
+    sheetIn(sheetRef.current);
+  }, []);
 
   const picked: CartOption[] = useMemo(() => {
     const out: CartOption[] = [];
@@ -304,15 +325,16 @@ function ItemSheet({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end bg-black/50 sm:items-center sm:justify-center" onClick={onClose}>
+    <div className="fixed inset-0 z-50 flex items-end bg-black/40 backdrop-blur-[2px] sm:items-center sm:justify-center" onClick={onClose}>
       <div
+        ref={sheetRef}
         dir={lang === 'ar' ? 'rtl' : 'ltr'}
-        className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-3xl bg-white p-5 sm:rounded-3xl"
+        className="max-h-[92dvh] w-full max-w-lg overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-apple sm:rounded-[28px]"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-stone-300 sm:hidden" />
-        {item.photo_url && <img src={item.photo_url} alt="" className="mb-3 h-44 w-full rounded-2xl object-cover" />}
-        <h3 className="text-xl font-extrabold text-stone-800">{lang === 'en' && item.name_en ? item.name_en : item.name}</h3>
+        {item.photo_url && <img src={item.photo_url} alt="" className="mb-3 h-44 w-full rounded-[22px] object-cover" />}
+        <h3 className="text-[21px] font-extrabold tracking-tight text-stone-900">{lang === 'en' && item.name_en ? item.name_en : item.name}</h3>
         {item.description && <p className="mt-1 text-sm text-stone-500">{item.description}</p>}
 
         <div className="mt-4 space-y-4">
@@ -331,8 +353,10 @@ function ItemSheet({
                     <button
                       key={o.id}
                       onClick={() => toggle(g, o.id)}
-                      className={`rounded-xl border px-3 py-2 text-sm font-bold transition ${
-                        isOn ? 'border-teal-700 bg-teal-50 text-teal-800' : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300'
+                      className={`rounded-2xl border px-3 py-2 text-sm font-bold transition active:scale-95 ${
+                        isOn
+                          ? 'border-teal-700 bg-teal-50 text-teal-800 shadow-sm'
+                          : 'border-stone-200 bg-white text-stone-600 hover:border-stone-300'
                       }`}
                     >
                       {lang === 'en' && o.name_en ? o.name_en : o.name}
@@ -346,7 +370,7 @@ function ItemSheet({
         </div>
 
         <div className="mt-5 flex items-center gap-3">
-          <div className="flex items-center gap-1 rounded-xl border border-stone-200 bg-white">
+          <div className="flex items-center gap-1 rounded-2xl border border-stone-200 bg-white">
             <button onClick={() => setQty((q) => Math.max(1, q - 1))} className="px-3 py-2 text-lg font-black text-stone-500">−</button>
             <span className="w-6 text-center text-sm font-extrabold">{qty}</span>
             <button onClick={() => setQty((q) => Math.min(10, q + 1))} className="px-3 py-2 text-lg font-black text-stone-500">+</button>
@@ -354,7 +378,7 @@ function ItemSheet({
           <button
             onClick={onAdd}
             disabled={Boolean(missing.length) || !table}
-            className="flex-1 rounded-xl bg-teal-700 px-4 py-3 font-extrabold text-white transition hover:bg-teal-800 disabled:bg-stone-300"
+            className="flex-1 rounded-2xl bg-teal-700 px-4 py-3 font-extrabold text-white shadow-apple transition hover:bg-teal-800 active:scale-[0.98] disabled:bg-stone-300"
           >
             {added ? t('added') : `${t('add')} · ${money(lang, Math.round(unit * qty * 100) / 100)}`}
           </button>

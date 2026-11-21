@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { dashT, fmtDate } from '../../lib/i18n';
 import { useAuth, Me } from '../../stores/auth';
 import { useDashLang, useDocDir } from '../../stores/dashlang';
 import { Btn, Err, Field, Input, Modal, Ok, Select, Spinner, StatusChip } from '../../components/ui';
 import ChangePasswordCard from '../../components/ChangePassword';
+import { staggerCards } from '../../lib/anim';
 
 type AdminShop = {
   id: string;
@@ -33,6 +34,12 @@ export default function AdminPanel() {
   const [creating, setCreating] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const tableRef = useRef<HTMLDivElement>(null);
+
+  // دخول متدرج لصفوف جدول المحلات عند كل تحديث للقائمة
+  useEffect(() => {
+    if (shops) staggerCards(tableRef.current);
+  }, [shops]);
 
   const isAdmin = me?.user.role === 'platform_admin';
 
@@ -117,7 +124,7 @@ export default function AdminPanel() {
           ) : shops.length === 0 ? (
             <p className="py-6 text-center text-sm font-bold text-stone-400">{t('noShops')}</p>
           ) : (
-            <div className="overflow-x-auto">
+            <div ref={tableRef} className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-start text-xs text-stone-400">
@@ -132,7 +139,7 @@ export default function AdminPanel() {
                 </thead>
                 <tbody>
                   {shops.map((s) => (
-                    <tr key={s.id} className="border-t border-stone-100">
+                    <tr key={s.id} data-card className="border-t border-stone-100">
                       <td className="p-2">
                         <p className="font-extrabold text-stone-800">{s.name}</p>
                         <p className="text-[11px] text-stone-400" dir="ltr">/{s.slug}</p>
