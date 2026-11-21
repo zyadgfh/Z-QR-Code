@@ -56,7 +56,7 @@ class MemoryDB {
     this.col(c).delete(id);
   }
 
-  async saveImage(shopId, filename, buffer, mime) {
+    async saveImage(shopId, filename, buffer, mime) {
     const id = `f${++this.fileCounter}${Math.random().toString(36).slice(2, 8)}`;
     this.files.set(id, { buffer, mime });
     return `/api/files/${id}`;
@@ -64,6 +64,10 @@ class MemoryDB {
 
   getImage(id) {
     return this.files.get(id) || null;
+  }
+
+  async ping() {
+    return { ok: true };
   }
 }
 
