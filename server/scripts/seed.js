@@ -1,5 +1,8 @@
 'use strict';
 
+// تحميل .env إن وجد (تشغيل محلي)
+try { process.loadEnvFile(); } catch { /* لا يوجد ملف .env */ }
+
 /** بذر بيانات الديمو في قاعدة البيانات الحالية (Firestore أو الذاكرة): npm run seed */
 const { createDB } = require('../db');
 const { seedDemo } = require('../seed');

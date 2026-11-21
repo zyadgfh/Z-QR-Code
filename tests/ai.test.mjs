@@ -50,8 +50,10 @@ test('مع المفتاح: نداء Gemini الوهمي يعيد مسودة من
   const png = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
   const originalFetch = globalThis.fetch;
   let calledUrl = '';
-  globalThis.fetch = async (url) => {
+  let calledHeaders = {};
+  globalThis.fetch = async (url, opts = {}) => {
     calledUrl = String(url);
+    calledHeaders = opts.headers || {};
     return {
       ok: true,
       status: 200,
@@ -66,6 +68,8 @@ test('مع المفتاح: نداء Gemini الوهمي يعيد مسودة من
     assert.equal(res.json.categories[0].items.length, 2);
     assert.ok(calledUrl.includes('generativelanguage.googleapis.com'), 'النداء server-side لـ Gemini');
     assert.ok(calledUrl.includes('gemini-3.5-flash-lite'), 'الموديل الافتراضي هو Gemini 3.5 Flash-Lite');
+    assert.equal(calledHeaders['x-goog-api-key'], 'fake-key', 'المفتاح يُرسل في ترويسة x-goog-api-key');
+    assert.ok(!calledUrl.includes('key='), 'المفتاح لا يظهر في الرابط');
   } finally {
     globalThis.fetch = originalFetch;
   }

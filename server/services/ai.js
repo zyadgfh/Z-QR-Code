@@ -131,7 +131,9 @@ async function extractMenu({ images, apiKey, model, fetchImpl } = {}) {
   if (!parsed.length) throw new HttpError(400, 'INVALID_IMAGE', 'أرسل صورة صالحة (JPG/PNG/WebP حتى 4MB)');
 
   const doFetch = fetchImpl || globalThis.fetch;
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_MODEL}:generateContent?key=${encodeURIComponent(apiKey)}`;
+  // المصادقة عبر الترويسة x-goog-api-key (الطريقة المعتمدة حاليًا — تدعم مفاتيح
+  // التنسيق القديم AIza والجديد AQ.) بدلًا من وضع المفتاح في الرابط
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_MODEL}:generateContent`;
   const body = {
     contents: [
       {
@@ -152,7 +154,7 @@ async function extractMenu({ images, apiKey, model, fetchImpl } = {}) {
   try {
     res = await doFetch(url, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
       body: JSON.stringify(body),
     });
   } catch {
