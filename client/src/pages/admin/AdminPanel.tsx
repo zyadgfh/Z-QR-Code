@@ -4,6 +4,7 @@ import { dashT, fmtDate } from '../../lib/i18n';
 import { useAuth, Me } from '../../stores/auth';
 import { useDashLang, useDocDir } from '../../stores/dashlang';
 import { Btn, Err, Field, Input, Modal, Ok, Select, Spinner, StatusChip } from '../../components/ui';
+import ChangePasswordCard from '../../components/ChangePassword';
 
 type AdminShop = {
   id: string;
@@ -100,6 +101,9 @@ export default function AdminPanel() {
             </div>
           </div>
         )}
+
+        {/* تغيير كلمة المرور */}
+        <ChangePasswordCard />
 
         {/* المحلات */}
         <div className="rounded-3xl bg-white p-5 shadow-sm">
@@ -216,18 +220,30 @@ function CreateShopModal({ onClose, onCreated }: { onClose: () => void; onCreate
 }
 
 function AdminLogin() {
-  return <AdminLoginInner />;
-}
-
-function AdminLoginInner() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const { lang } = useDashLang();
+  const t = dashT(lang);
   const setToken = useAuth((s) => s.setToken);
   const loadMe = useAuth((s) => s.loadMe);
+  const [phase, setPhase] = useState<'checking' | 'bootstrap' | 'login'>('checking');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
-  const submit = async (e: React.FormEvent) => {
+  useEffect(() => {
+    fetch('/api/auth/admin-exists')
+      .then((r) => r.json())
+      .then((d) => setPhase(d?.exists ? 'login' : 'bootstrap'))
+      .catch(() => setPhase('login'));
+  }, []);
+
+  const afterAuth = async (token: string) => {
+    setToken(token);
+    await loadMe();
+  };
+
+  const submitLogin = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     setError(null);
@@ -239,8 +255,28 @@ function AdminLoginInner() {
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error?.message || 'خطأ');
-      setToken(json.token);
-      await loadMe();
+      await afterAuth(json.token);
+    } catch (err: any) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  const submitBootstrap = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    if (password !== confirm) return setError(t('passwordMismatch'));
+    if (password.length < 10) return setError(lang === 'ar' ? 'كلمة المرور 10 أحرف على الأقل' : 'Password must be at least 10 characters');
+    setBusy(true);
+    try {
+      const res = await fetch('/api/auth/bootstrap-admin', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error?.message || 'خطأ');
+      await afterAuth(json.token);
     } catch (err: any) {
       setError(err.message);
       setBusy(false);
@@ -248,14 +284,39 @@ function AdminLoginInner() {
   };
 
   return (
-    <form onSubmit={submit} className="mx-auto mt-16 w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl">
-      <h2 className="mb-4 text-center text-lg font-extrabold text-stone-800">🛡 {dashT('ar')('adminTitle')}</h2>
-      <div className="space-y-3">
-        <Field label={dashT('ar')('email')}><Input type="email" dir="ltr" value={email} onChange={(e) => setEmail(e.target.value)} /></Field>
-        <Field label={dashT('ar')('password')}><Input type="password" dir="ltr" value={password} onChange={(e) => setPassword(e.target.value)} /></Field>
-        {error && <Err error={error} />}
-        <Btn type="submit" disabled={busy} className="w-full py-2.5">{dashT('ar')('signin')}</Btn>
-      </div>
+    <form
+      onSubmit={phase === 'bootstrap' ? submitBootstrap : submitLogin}
+      className="mx-auto mt-10 w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl"
+    >
+      <h2 className="mb-1 text-center text-lg font-extrabold text-stone-800">
+        🛡 {phase === 'bootstrap' ? t('setupTitle') : t('adminExistsTitle')}
+      </h2>
+      {phase === 'bootstrap' && (
+        <p className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold leading-relaxed text-amber-800">
+          {t('setupHint')}
+        </p>
+      )}
+      {phase === 'checking' ? (
+        <p className="py-6 text-center text-sm text-stone-400">…</p>
+      ) : (
+        <div className="space-y-3">
+          <Field label={t('email')}>
+            <Input type="email" dir="ltr" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
+          </Field>
+          <Field label={t('password')}>
+            <Input type="password" dir="ltr" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete={phase === 'bootstrap' ? 'new-password' : 'current-password'} />
+          </Field>
+          {phase === 'bootstrap' && (
+            <Field label={t('confirmNewPassword')}>
+              <Input type="password" dir="ltr" required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
+            </Field>
+          )}
+          {error && <Err error={error} />}
+          <Btn type="submit" disabled={busy} className="w-full py-2.5">
+            {busy ? '…' : phase === 'bootstrap' ? `🛡 ${t('createAdmin')}` : t('signin')}
+          </Btn>
+        </div>
+      )}
     </form>
   );
 }

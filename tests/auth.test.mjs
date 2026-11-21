@@ -117,3 +117,93 @@ test('الأدمن يعدّل إعدادات المنصة (السعر وتعلي
   assert.equal(sum.json.subscription.monthly_price, 350);
   assert.equal(sum.json.subscription.payment_instructions, 'حوّل على 0100');
 });
+
+test('بوابة الإعداد: إنشاء أول أدمن عند قاعدة فارغة ومنع التكرار نهائيًا', async () => {
+  const { base } = await startServer({ seed: false });
+
+  let ex = await api(base, '/api/auth/admin-exists');
+  assert.equal(ex.status, 200);
+  assert.equal(ex.json.exists, false);
+
+  // كلمة مرور ضعيفة → 400
+  const weak = await api(base, '/api/auth/bootstrap-admin', {
+    method: 'POST',
+    body: { email: 'boss@x.app', password: 'short' },
+  });
+  assert.equal(weak.status, 400);
+  assert.equal(weak.json.error.code, 'WEAK_PASSWORD');
+
+  // بريد غير صالح → 400
+  const badEmail = await api(base, '/api/auth/bootstrap-admin', {
+    method: 'POST',
+    body: { email: 'not-email', password: 'strong-pass-123' },
+  });
+  assert.equal(badEmail.status, 400);
+
+  // الإنشاء الصحيح → 201 + token بصلاحية أدمن
+  const ok = await api(base, '/api/auth/bootstrap-admin', {
+    method: 'POST',
+    body: { email: 'boss@x.app', password: 'strong-pass-123' },
+  });
+  assert.equal(ok.status, 201);
+  assert.ok(ok.json.token);
+  assert.equal(ok.json.user.role, 'platform_admin');
+
+  // البوابة تُغلق نهائيًا
+  ex = await api(base, '/api/auth/admin-exists');
+  assert.equal(ex.json.exists, true);
+  const again = await api(base, '/api/auth/bootstrap-admin', {
+    method: 'POST',
+    body: { email: 'other@x.app', password: 'another-strong-pass' },
+  });
+  assert.equal(again.status, 403);
+  assert.equal(again.json.error.code, 'ALREADY_INITIALIZED');
+
+  // الدخول بالحساب الجديد يعمل
+  const login = await api(base, '/api/auth/login', {
+    method: 'POST',
+    body: { email: 'boss@x.app', password: 'strong-pass-123' },
+  });
+  assert.equal(login.status, 200);
+  assert.equal(login.json.user.role, 'platform_admin');
+
+  // والأدمن الجديد يرى لوحة المنصة
+  assert.equal((await api(base, '/api/admin/shops', { token: login.json.token })).status, 200);
+});
+
+test('تغيير كلمة المرور: الحالية إلزامية والجديدة تعمل فورًا', async () => {
+  const { base } = await startServer();
+  const t = await login(base, NILE_OWNER.email, NILE_OWNER.password);
+
+  // كلمة المرور الحالية خاطئة → 400
+  const wrong = await api(base, '/api/auth/password', {
+    token: t,
+    method: 'PUT',
+    body: { current_password: 'totally-wrong', new_password: 'newpass123' },
+  });
+  assert.equal(wrong.status, 400);
+  assert.equal(wrong.json.error.code, 'WRONG_PASSWORD');
+
+  // الجديدة قصيرة → 400
+  const weak = await api(base, '/api/auth/password', {
+    token: t,
+    method: 'PUT',
+    body: { current_password: 'owner123', new_password: 'abc' },
+  });
+  assert.equal(weak.status, 400);
+
+  // التغيير الصحيح
+  const ok = await api(base, '/api/auth/password', {
+    token: t,
+    method: 'PUT',
+    body: { current_password: 'owner123', new_password: 'newpass123' },
+  });
+  assert.equal(ok.status, 200);
+  assert.equal(ok.json.ok, true);
+
+  // القديمة لم تعد تعمل، والجديدة تعمل
+  assert.equal((await api(base, '/api/auth/login', { method: 'POST', body: { email: NILE_OWNER.email, password: 'owner123' } })).status, 401);
+  const newLogin = await api(base, '/api/auth/login', { method: 'POST', body: { email: NILE_OWNER.email, password: 'newpass123' } });
+  assert.equal(newLogin.status, 200);
+  assert.ok(newLogin.json.token);
+});
