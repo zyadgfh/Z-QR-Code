@@ -34,6 +34,14 @@ export default function DashMenu() {
   const [editing, setEditing] = useState<{ item: Item | null; open: boolean }>({ item: null, open: false });
   const [aiOpen, setAiOpen] = useState(false);
   const [trOpen, setTrOpen] = useState(false);
+  // حدود الخطة المجانية (BIZ-02) للعرض
+  const [usage, setUsage] = useState<{ plan: string; items_used: number; item_limit: number; orders_this_month: number; order_limit: number } | null>(null);
+
+  useEffect(() => {
+    api<any>('/api/shop/usage')
+      .then(setUsage)
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -85,6 +93,32 @@ export default function DashMenu() {
         <Btn variant="soft" onClick={() => setTrOpen(true)}>🌐 {t('translate')}</Btn>
         <Btn variant="ghost" onClick={addCategory}>＋ {t('addCategory')}</Btn>
       </div>
+
+      {/* حدود الخطة المجانية (BIZ-02) */}
+      {usage && usage.plan !== 'pro' && (
+        <div className="rounded-3xl border border-amber-200 bg-amber-50 p-3.5">
+          <div className="mb-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs font-extrabold text-amber-800">
+            <span>🧩 {t('itemsUsed')}: {usage.items_used}/{usage.item_limit}</span>
+            <span>🧾 {t('ordersThisMonth')}: {usage.orders_this_month}/{usage.order_limit}</span>
+            <span className="ms-auto text-amber-700">⬆ {t('upgradeHint')}</span>
+          </div>
+          <div className="h-1.5 w-full overflow-hidden rounded-full bg-amber-200">
+            <div className="h-full rounded-full bg-amber-500" style={{ width: `${Math.min(100, Math.round((usage.items_used / usage.item_limit) * 100))}%` }} />
+          </div>
+        </div>
+      )}
+
+      {/* معالج الإعداد (ADMIN-02) — يظهر حتى اكتمال الأساس */}
+      {data && (data.categories.length === 0 || data.items.length === 0) && (
+        <div className="rounded-3xl border border-teal-200 bg-teal-50 p-4">
+          <h3 className="mb-2 text-sm font-black text-teal-900">🚀 {t('wizardTitle')}</h3>
+          <ul className="space-y-1.5 text-sm font-bold text-teal-800">
+            <li>{data.categories.length > 0 ? '✅' : '⬜'} {t('wizardStep1')}</li>
+            <li>{data.items.length > 0 ? '✅' : '⬜'} {t('wizardStep2')}</li>
+            <li>⬜ {t('wizardStep3')} <span className="text-teal-600">← {t('settings')}</span></li>
+          </ul>
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-[220px_1fr]">
         {/* التصنيفات */}

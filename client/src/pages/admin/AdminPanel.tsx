@@ -21,9 +21,10 @@ type AdminShop = {
   paid_until: number | null;
   status: 'trial' | 'active' | 'locked';
   table_count: number;
+  plan?: 'free' | 'pro';
 };
 
-type PlatformSettings = { monthly_price: number; payment_instructions: string };
+type PlatformSettings = { monthly_price: number; payment_instructions: string; free_item_limit?: number; free_order_limit?: number };
 
 export default function AdminPanel() {
   const { token, me, loadMe } = useAuth();
@@ -120,6 +121,15 @@ export default function AdminPanel() {
                 <Input value={settings.payment_instructions} onChange={(e) => setSettings({ ...settings, payment_instructions: e.target.value })} />
               </Field>
             </div>
+            {/* حدود الخطة المجانية (BIZ-02) */}
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <Field label={t('itemsUsed')}>
+                <Input type="number" min={1} value={settings.free_item_limit ?? 50} onChange={(e) => setSettings({ ...settings, free_item_limit: Number(e.target.value) })} />
+              </Field>
+              <Field label={t('ordersThisMonth')}>
+                <Input type="number" min={1} value={settings.free_order_limit ?? 200} onChange={(e) => setSettings({ ...settings, free_order_limit: Number(e.target.value) })} />
+              </Field>
+            </div>
             <div className="mt-3 flex items-center gap-2">
               <Btn onClick={() => act(() => api('/api/admin/settings', { method: 'PUT', body: settings }))}>{t('save')}</Btn>
               {saved && <Ok>{t('saved')}</Ok>}
@@ -170,7 +180,15 @@ export default function AdminPanel() {
                       <td className="p-2"><StatusChip status={s.status} t={t} /></td>
                       <td className="p-2">
                         <div className="flex flex-wrap gap-1.5">
-                          <Btn variant="soft" onClick={() => act(() => api(`/api/admin/shops/${s.id}/mark-paid`, { method: 'POST' }))}>💳 {t('markPaid')}</Btn>
+                          <select
+                            value={s.plan || 'free'}
+                            onChange={(e) => act(() => api(`/api/admin/shops/${s.id}/plan`, { method: 'POST', body: { plan: e.target.value } }))}
+                            className="rounded-xl border border-stone-300 px-2 py-1.5 text-xs font-extrabold text-stone-600"
+                          >
+                            <option value="free">{t('planFree')}</option>
+                            <option value="pro">{t('planPro')} ⭐</option>
+                          </select>
+                          <Btn variant="soft" onClick={() => act(() => api(`/api/admin/shops/${s.id}/mark-paid`, { method: 'POST', body: { months: 1 } }))}>💳 {t('markPaid')}</Btn>
                           {s.status === 'locked' ? (
                             <Btn onClick={() => act(() => api(`/api/admin/shops/${s.id}/lock`, { method: 'POST', body: { locked: false } }))}>🔓 {t('unlock')}</Btn>
                           ) : (

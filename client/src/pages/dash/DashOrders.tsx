@@ -8,6 +8,7 @@ import { Btn, Err, Input, Label, Modal, Spinner } from '../../components/ui';
 import { staggerCards } from '../../lib/anim';
 import { useOrdersLive, type Order } from '../../hooks/useOrdersLive';
 import { enablePush, disablePush } from '../../lib/push';
+import { useAuth } from '../../stores/auth';
 
 export type { Order };
 export type { OrderItem } from '../../hooks/useOrdersLive';
@@ -117,6 +118,26 @@ export default function DashOrders() {
         >
           {pushOn ? `🔔 ${t('pushOn')}` : `🔕 ${t('pushEnable')}`}
         </button>
+        {mem.role === 'owner' && (
+          <button
+            onClick={async () => {
+              try {
+                const res = await fetch('/api/shop/orders/export', {
+                  headers: { authorization: `Bearer ${useAuth.getState().token}` },
+                });
+                const blob = await res.blob();
+                const a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'orders.csv';
+                a.click();
+                URL.revokeObjectURL(a.href);
+              } catch { /* فشل التنزيل صامت */ }
+            }}
+            className="rounded-full bg-white px-4 py-1.5 text-xs font-extrabold text-stone-600 shadow-sm transition hover:bg-stone-50"
+          >
+            ⬇ {t('exportOrders')}
+          </button>
+        )}
         <button
           onClick={toggleSound}
           className={`ms-auto rounded-full px-4 py-1.5 text-xs font-extrabold shadow-sm transition ${
@@ -242,7 +263,10 @@ function OrderCard({
   return (
     <div data-card className={`rounded-3xl border border-black/[0.04] bg-white p-4 shadow-apple ${tone ? TONES[tone] : ''}`}>
       <div className="mb-2 flex items-center gap-2">
-        <span className="rounded-full bg-stone-800 px-3 py-1 text-xs font-black text-white">{t('table')} {o.table_number}</span>
+        <span className="rounded-full bg-stone-800 px-3 py-1 text-xs font-black text-white">
+          {o.table_number ? `${t('table')} ${o.table_number}` : o.service === 'delivery' ? `🛵 ${t('serviceDelivery')}` : `🥡 ${t('serviceTakeaway')}`}
+        </span>
+        {o.customer_phone && <span className="text-xs font-bold text-stone-400" dir="ltr">{o.customer_phone}</span>}
         <span className="text-xs font-bold text-stone-400">{t('minAgo')} {Math.max(1, Math.floor((now - o.created_at) / 60000))} {t('min')}</span>
         {o.status === 'preparing' && o.eta_minutes && (
           <span className="rounded-full bg-white px-2 py-0.5 text-xs font-extrabold text-teal-700">⏱ {o.eta_minutes} {t('min')}</span>
@@ -265,6 +289,19 @@ function OrderCard({
         ))}
       </div>
       {o.note && <p className="mt-2 rounded-xl bg-amber-100 px-3 py-1.5 text-xs font-bold text-amber-800">📝 {o.note}</p>}
+      {/* تفاصيل الخصم والرسوم (F-06/F-11) */}
+      {(o.discount_code || o.delivery_fee) && (
+        <div className="mt-1.5 flex flex-wrap gap-2 text-[11px] font-extrabold">
+          {o.discount_code && (
+            <span className="rounded-full bg-green-50 px-2 py-0.5 text-green-700">
+              🏷 {o.discount_code} −{o.discount_amount}
+            </span>
+          )}
+          {Boolean(o.delivery_fee) && (
+            <span className="rounded-full bg-sky-50 px-2 py-0.5 text-sky-700">🛵 +{o.delivery_fee}</span>
+          )}
+        </div>
+      )}
       <div className="mt-3 flex gap-2">
         {o.status === 'pending' && onAccept && (
           <Btn className="flex-1" onClick={() => onAccept(o)}>✓ {t('accept')}</Btn>

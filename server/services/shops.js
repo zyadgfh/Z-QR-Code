@@ -77,6 +77,8 @@ async function createShop(
     menu_language,
     table_count: tables,
     logo_url: null,
+    owner_email: sEmail,
+    plan: 'free',
     created_at: now,
     trial_ends_at: now + TRIAL_DAYS * 86400000,
     paid_until: null,
@@ -124,6 +126,15 @@ async function updateSettings(db, shopId, patch) {
   }
   if (patch.logo_url !== undefined) {
     out.logo_url = patch.logo_url === null ? null : asStr(patch.logo_url, { max: 500 });
+  }
+  // رسوم التوصيل (F-11): اختيارية ≥0 — تُطبق على طلبات التوصيل فقط
+  if (patch.delivery_fee !== undefined) {
+    if (patch.delivery_fee === null || patch.delivery_fee === '') out.delivery_fee = 0;
+    else {
+      const v = asMoney(patch.delivery_fee);
+      if (v === null || v < 0 || v > 1000) throw new HttpError(400, 'INVALID_FEE', 'رسوم التوصيل بين 0 و1000');
+      out.delivery_fee = v;
+    }
   }
   // مواعيد العمل الأسبوعية (F-05): مصفوفة 7 عناصر (0=الأحد) — كل عنصر null (مغلق) أو {open,close}
   if (patch.hours !== undefined) {

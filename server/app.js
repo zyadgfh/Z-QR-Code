@@ -7,6 +7,7 @@ const { HttpError, h } = require('./lib/errors');
 const { createRedis } = require('./lib/redis');
 const { createMailer } = require('./lib/mailer');
 const { createNotifier } = require('./lib/notifier');
+const { createPaymentProvider } = require('./lib/payments');
 
 const authRoutes = require('./routes/auth');
 const publicRoutes = require('./routes/public');
@@ -60,7 +61,7 @@ function createApp(opts = {}) {
     next();
   });
 
-  const ctx = { db, env, redis: createRedis(env), mailer: createMailer(env), notifier: createNotifier(env, db) };
+  const ctx = { db, env, redis: createRedis(env), mailer: createMailer(env), notifier: createNotifier(env, db), payments: createPaymentProvider(env) };
   app.set('qm_redis', ctx.redis);
 
   app.get(

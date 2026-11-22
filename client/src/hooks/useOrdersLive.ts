@@ -13,9 +13,15 @@ export type OrderItem = {
 
 export type Order = {
   id: string;
-  table_number: number;
+  table_number: number | null;
+  service?: 'dine_in' | 'takeaway' | 'delivery';
+  customer_phone?: string | null;
   note: string;
   total: number;
+  subtotal?: number;
+  discount_code?: string | null;
+  discount_amount?: number;
+  delivery_fee?: number;
   status: 'pending' | 'preparing' | 'ready' | 'done';
   eta_minutes: number | null;
   created_at: number;

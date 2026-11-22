@@ -6,6 +6,7 @@ import { useAuth, Shop } from '../../stores/auth';
 import { compressImage } from '../../lib/img';
 import { Btn, Err, Field, Input, Ok, Select, Spinner, StatusChip } from '../../components/ui';
 import ChangePasswordCard from '../../components/ChangePassword';
+import DiscountsCard from '../../components/DiscountsCard';
 
 type Summary = {
   shop: Shop;
@@ -32,6 +33,7 @@ export default function DashSettings() {
   const [hours, setHours] = useState<Array<{ open: string; close: string } | null>>(Array(7).fill(null));
   const [theme, setTheme] = useState<string>('');
   const [brandColor, setBrandColor] = useState<string>('#0f766e');
+  const [deliveryFee, setDeliveryFee] = useState('');
 
   useEffect(() => {
     api<Summary>('/api/shop/summary').then((s) => {
@@ -47,6 +49,7 @@ export default function DashSettings() {
       }
       setTheme((s.shop as any).theme || '');
       setBrandColor((s.shop as any).brand_color || '#0f766e');
+      setDeliveryFee(String((s.shop as any).delivery_fee ?? ''));
     });
   }, []);
 
@@ -79,6 +82,7 @@ export default function DashSettings() {
           hours: hoursOn ? hours : null,
           theme: theme || null,
           brand_color: /^#[0-9a-fA-F]{6}$/.test(brandColor) ? brandColor : null,
+          delivery_fee: deliveryFee === '' ? 0 : Number(deliveryFee),
         },
       });
       await loadMe();
@@ -119,6 +123,20 @@ export default function DashSettings() {
           {saved && <Ok>{t('saved')}</Ok>}
         </div>
         <p className="mt-2 text-[11px] font-bold text-stone-400">ℹ️ {t('phone')}</p>
+
+        {/* رسوم التوصيل (F-11) */}
+        <div className="mt-4 border-t border-stone-100 pt-4">
+          <Field label={t('deliveryFee')}>
+            <Input
+              type="number"
+              min={0}
+              step="0.5"
+              value={deliveryFee}
+              onChange={(e) => setDeliveryFee(e.target.value)}
+              placeholder="0"
+            />
+          </Field>
+        </div>
 
         {/* الثيم ولون الهوية */}
         <div className="mt-4 grid gap-3 border-t border-stone-100 pt-4 sm:grid-cols-2">
@@ -206,6 +224,7 @@ export default function DashSettings() {
       </div>
 
       <ChangePasswordCard />
+      <DiscountsCard />
     </div>
   );
 }

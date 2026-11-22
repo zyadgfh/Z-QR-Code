@@ -3,8 +3,10 @@
 const crypto = require('crypto');
 
 const { HttpError } = require('../lib/errors');
-const { asStr, asInt, roundMoney } = require('../lib/validate');
+const { asStr, asInt, roundMoney, asMoney } = require('../lib/validate');
 const shops = require('./shops');
+const discounts = require('./discounts');
+const adminService = require('./admin');
 
 /**
  * إنشاء طلب من العميل — التحقق الكامل يقع على الخادم:
@@ -23,8 +25,23 @@ async function createPublicOrder(db, slug, payload = {}) {
     throw new HttpError(423, 'SHOP_HOURS', 'المحل مغلق الآن حسب مواعيد العمل — اطلب في المواعيد المحددة');
   }
 
+  // نوع الخدمة (F-11): طاولة = جلوس؛ بدون طاولة يلزم service صريح (تاك أوي/توصيل)
+  const wantsTable = payload.table !== undefined && payload.table !== null && payload.table !== '';
   const table = asInt(payload.table, { min: 1, max: shop.table_count });
-  if (!table) throw new HttpError(400, 'INVALID_TABLE', `رقم الترابيزة يجب أن يكون بين 1 و${shop.table_count}`);
+  if (wantsTable && !table)
+    throw new HttpError(400, 'INVALID_TABLE', `رقم الترابيزة يجب أن يكون بين 1 و${shop.table_count}`);
+  let service = 'dine_in';
+  let customerPhone = null;
+  if (!wantsTable) {
+    service = String(payload.service || '');
+    if (!['takeaway', 'delivery'].includes(service))
+      throw new HttpError(400, 'INVALID_SERVICE', 'الطلب الخارجي يحتاج نوع خدمة: takeaway أو delivery');
+    if (payload.customer_phone !== undefined && payload.customer_phone !== null && payload.customer_phone !== '') {
+      const phone = asStr(payload.customer_phone, { min: 6, max: 20 });
+      if (!/^[+\d][\d\s-]{5,19}$/.test(phone)) throw new HttpError(400, 'INVALID_PHONE_ORDER', 'رقم الهاتف غير صحيح');
+      customerPhone = phone;
+    }
+  }
 
   const note = asStr(payload.note, { max: 300 }) || '';
 
@@ -106,13 +123,44 @@ async function createPublicOrder(db, slug, payload = {}) {
 
   if (total <= 0) throw new HttpError(400, 'INVALID_TOTAL', 'إجمالي الطلب غير صحيح');
 
+  // كود الخصم (F-06): التحقق والحساب خادمي حصريًا ثم تُخصم من المجموع
+  let discount = null;
+  const rawCode = typeof payload.discount_code === 'string' ? payload.discount_code : '';
+  if (rawCode.trim()) {
+    discount = await discounts.validateForOrder(db, shop.id, rawCode, total);
+  }
+
+  // رسوم التوصيل (F-11): تُحدد بالمحل وتطبق على توصيل فقط
+  const deliveryFee = service === 'delivery' ? Math.max(0, asMoney(shop.delivery_fee) || 0) : 0;
+  const grandTotal = roundMoney(Math.max(0, total - (discount ? discount.amount : 0)) + deliveryFee);
+  if (grandTotal <= 0) throw new HttpError(400, 'INVALID_TOTAL', 'إجمالي الطلب غير صحيح');
+
+  // حدود الخطة المجانية (BIZ-02) — مفرضة على مستوى الخادم
+  if ((shop.plan || 'free') !== 'pro') {
+    const settings = await adminService.getSettings(db);
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const monthOrders = (await db.query('orders', [{ field: 'shop_id', value: shop.id }])).filter(
+      (o) => o.created_at >= monthStart.getTime()
+    );
+    if (monthOrders.length >= settings.free_order_limit)
+      throw new HttpError(402, 'PLAN_LIMIT', 'بلغ هذا المحل حد الطلبات الشهري للخطة المجانية — تُرفض الطلبات حتى الترقية أو تجديد الدورة');
+  }
+
   const id = crypto.randomUUID();
   const now = Date.now();
   const order = {
     shop_id: shop.id,
-    table_number: table,
+    table_number: table || null,
+    service,
+    customer_phone: customerPhone,
     note,
-    total,
+    subtotal: total,
+    discount_code: discount ? discount.code : null,
+    discount_amount: discount ? discount.amount : 0,
+    delivery_fee: deliveryFee,
+    total: grandTotal,
     status: 'pending',
     eta_minutes: null,
     accepted_at: null,
@@ -120,7 +168,12 @@ async function createPublicOrder(db, slug, payload = {}) {
     items: snapshots,
   };
   await db.set('orders', id, order);
-  return { id, total, table_number: table, created_at: now };
+  if (discount) {
+    // عدّاد الاستخدام: قراءة → كتابة (تسلسل كافٍ داخل نسخة واحدة)
+    const rows = await db.query('discounts', [{ field: 'id', value: discount.id }]);
+    if (rows[0]) await db.update('discounts', discount.id, { used_count: (rows[0].used_count || 0) + 1 });
+  }
+  return { id, total: grandTotal, subtotal: total, discount_amount: order.discount_amount, delivery_fee: deliveryFee, table_number: order.table_number, service, created_at: now };
 }
 
 /** حالة الطلب للعميل — بدون كشف مراحل العمل الداخلية */
@@ -136,6 +189,10 @@ async function publicStatus(db, orderId) {
     eta_minutes: state === 'accepted' ? order.eta_minutes : null,
     created_at: order.created_at,
     table_number: order.table_number,
+    service: order.service || 'dine_in',
+    discount_code: order.discount_code || null,
+    discount_amount: order.discount_amount || 0,
+    delivery_fee: order.delivery_fee || 0,
     total: order.total,
     items: (order.items || []).map((i) => ({
       name: i.name,

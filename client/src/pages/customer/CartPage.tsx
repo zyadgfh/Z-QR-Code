@@ -19,6 +19,10 @@ export default function CartPage() {
   const [note, setNote] = useState('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // طلب خارجي (F-11) + كود خصم (F-06)
+  const [service, setService] = useState<'takeaway' | 'delivery' | null>(null);
+  const [phone, setPhone] = useState('');
+  const [discountCode, setDiscountCode] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
 
@@ -31,25 +35,29 @@ export default function CartPage() {
   }, [lines.length]);
 
   const total = Math.round(lines.reduce((s, l) => s + lineTotal(l), 0) * 100) / 100;
+  const canSend = Boolean(lines.length) && (Boolean(table) || service === 'takeaway' || service === 'delivery');
 
   const send = async () => {
-    if (!table || !lines.length) return;
+    if (!canSend) return;
     setSending(true);
     setError(null);
     try {
-      const res = await api<{ id: string }>(`/api/public/shops/${slug}/orders`, {
-        method: 'POST',
-        body: {
-          table,
-          note,
-          items: lines.map((l) => ({
-            item_id: l.item_id,
-            qty: l.qty,
-            option_ids: l.options.map((o) => o.option_id),
-          })),
-        },
-      });
-      localStorage.setItem(`qm-order:${slug}:${table}`, res.id);
+      const body: Record<string, unknown> = {
+        note,
+        items: lines.map((l) => ({
+          item_id: l.item_id,
+          qty: l.qty,
+          option_ids: l.options.map((o) => o.option_id),
+        })),
+      };
+      if (table) body.table = table;
+      else {
+        body.service = service;
+        if (phone.trim()) body.customer_phone = phone.trim();
+      }
+      if (discountCode.trim()) body.discount_code = discountCode.trim();
+      const res = await api<{ id: string }>(`/api/public/shops/${slug}/orders`, { method: 'POST', body });
+      if (table) localStorage.setItem(`qm-order:${slug}:${table}`, res.id);
       clear(slug);
       navigate(`/${slug}/o/${res.id}`, { replace: true });
     } catch (e: any) {
@@ -107,17 +115,59 @@ export default function CartPage() {
                 className="w-full resize-none rounded-2xl border border-stone-200 p-2.5 text-sm outline-none focus:border-teal-600"
               />
             </div>
+
+            {/* نوع الخدمة للطلب الخارجي (F-11) */}
+            {!table && (
+              <div className="rounded-[22px] border border-black/[0.04] bg-white p-3.5 shadow-apple">
+                <label className="mb-2 block text-xs font-bold text-stone-500">{t('externalService')}</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {(['takeaway', 'delivery'] as const).map((sv) => (
+                    <button
+                      key={sv}
+                      onClick={() => setService(sv)}
+                      className={`rounded-2xl border px-3 py-3 text-sm font-extrabold transition active:scale-95 ${
+                        service === sv ? 'border-teal-700 bg-teal-50 text-teal-800 shadow-sm' : 'border-stone-200 bg-white text-stone-600'
+                      }`}
+                    >
+                      {t(sv)}
+                    </button>
+                  ))}
+                </div>
+                {service === 'delivery' && (
+                  <input
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value.slice(0, 20))}
+                    placeholder={t('customerPhone')}
+                    inputMode="tel"
+                    dir="ltr"
+                    className="mt-2 w-full rounded-2xl border border-stone-200 p-2.5 text-sm outline-none focus:border-teal-600"
+                  />
+                )}
+              </div>
+            )}
+
+            {/* كود الخصم (F-06) — التحقق والحساب في الخادم */}
+            <div className="rounded-[22px] border border-black/[0.04] bg-white p-3.5 shadow-apple">
+              <label className="mb-1 block text-xs font-bold text-stone-500">{t('discountCode')}</label>
+              <input
+                value={discountCode}
+                onChange={(e) => setDiscountCode(e.target.value.toUpperCase().slice(0, 40))}
+                placeholder="SAVE10"
+                dir="ltr"
+                className="w-full rounded-2xl border border-stone-200 p-2.5 text-sm font-extrabold outline-none focus:border-teal-600"
+              />
+            </div>
+
             <div className="flex items-center justify-between rounded-[22px] bg-white px-4 py-3 shadow-apple">
               <span className="font-extrabold text-stone-900">{t('total')}</span>
               <span className="text-lg font-black text-teal-700">{money(lang, total)}</span>
             </div>
             {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p>}
-            {!table && <p className="rounded-xl bg-amber-50 px-3 py-2 text-sm font-bold text-amber-700">{t('needTable')}</p>}
           </>
         )}
       </div>
 
-      {lines.length > 0 && table && (
+      {lines.length > 0 && canSend && (
         <div className="fixed inset-x-0 bottom-0 mx-auto max-w-lg p-3">
           <button
             onClick={send}

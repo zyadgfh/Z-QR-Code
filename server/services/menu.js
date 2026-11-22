@@ -4,6 +4,7 @@ const crypto = require('crypto');
 
 const { HttpError } = require('../lib/errors');
 const { asStr, asMoney, asBool, asInt } = require('../lib/validate');
+const adminService = require('./admin');
 
 /** جلب مستند ينتمي للمحل — 404 إن لم يوجد أو لا يخص هذا المحل (لا نكشف الوجود) */
 async function mustOwn(db, col, id, shopId) {
@@ -102,6 +103,15 @@ function itemFields(body) {
 
 async function createItem(db, shopId, body) {
   await mustOwn(db, 'categories', body.category_id, shopId);
+  // حدود الخطة المجانية (BIZ-02): عدد الأصناف النشطة محدود على free — مفروض خادميًا
+  const shop = await db.get('shops', shopId);
+  const plan = (shop && shop.plan) || 'free';
+  if (plan !== 'pro') {
+    const settings = await adminService.getSettings(db);
+    const active = (await db.query('items', [{ field: 'shop_id', value: shopId }])).filter((i) => i.available !== false);
+    if (active.length >= settings.free_item_limit)
+      throw new HttpError(402, 'PLAN_LIMIT', 'بلغتَ حد الأصناف للخطة المجانية — أخفِ أصنافًا غير مطلوبة أو رقِّ للخطة الاحترافية');
+  }
   const fields = itemFields(body);
   const sort = await nextSort(db, 'items', shopId, [{ field: 'category_id', value: body.category_id }]);
   const id = crypto.randomUUID();

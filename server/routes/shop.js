@@ -11,6 +11,8 @@ const shopsService = require('../services/shops');
 const adminService = require('../services/admin');
 const aiService = require('../services/ai');
 const { parseDataUrl } = require('../services/ai');
+const discountsService = require('../services/discounts');
+const { ordersCsv } = require('../lib/csv');
 
 module.exports = function shopRoutes(ctx) {
   const { db, env } = ctx;
@@ -264,6 +266,57 @@ module.exports = function shopRoutes(ctx) {
       res.json(proposal);
     })
   );
+
+  // ---------- أكواد الخصم (F-06) — مالك فقط ----------
+  r.get('/discounts', h(async (req, res) => {
+    ownerOnly(req);
+    res.json(await discountsService.listForShop(db, req.member.shop_id));
+  }));
+
+  r.post('/discounts', h(async (req, res) => {
+    ownerOnly(req);
+    const d = await discountsService.create(db, req.member.shop_id, req.body || {});
+    res.status(201).json(d);
+  }));
+
+  r.delete('/discounts/:id', h(async (req, res) => {
+    ownerOnly(req);
+    await discountsService.remove(db, req.member.shop_id, req.params.id);
+    res.json({ ok: true });
+  }));
+
+  // ---------- استهلاك الخطة (BIZ-02) للعرض في اللوحة ----------
+  r.get('/usage', h(async (req, res) => {
+    ownerOnly(req);
+    const shop = await shopsService.byId(db, req.member.shop_id);
+    const settings = await adminService.getSettings(db);
+    const monthStart = new Date();
+    monthStart.setDate(1);
+    monthStart.setHours(0, 0, 0, 0);
+    const items = await db.query('items', [{ field: 'shop_id', value: req.member.shop_id }]);
+    const orders = await db.query('orders', [{ field: 'shop_id', value: req.member.shop_id }]);
+    res.json({
+      plan: (shop && shop.plan) || 'free',
+      items_used: items.filter((i) => i.available !== false).length,
+      item_limit: settings.free_item_limit,
+      orders_this_month: orders.filter((o) => o.created_at >= monthStart.getTime()).length,
+      order_limit: settings.free_order_limit,
+      delivery_fee: (shop && shop.delivery_fee) || 0,
+      monthly_price: settings.monthly_price,
+    });
+  }));
+
+  // ---------- تصدير الطلبات CSV (ECO-02) — مالك فقط ----------
+  r.get('/orders/export', h(async (req, res) => {
+    ownerOnly(req);
+    const all = await ordersService.listForShop(db, req.member.shop_id);
+    const from = Number(req.query.from) || 0;
+    const to = Number(req.query.to) || Infinity;
+    const rows = all.filter((o) => o.created_at >= from && o.created_at <= to);
+    res.set('content-type', 'text/csv; charset=utf-8');
+    res.set('content-disposition', `attachment; filename="orders-${req.member.shop_id}.csv"`);
+    res.send(ordersCsv(rows));
+  }));
 
   // ---------- الموظفين (مالك فقط) ----------
   r.get(

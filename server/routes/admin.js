@@ -5,6 +5,7 @@ const { h, HttpError } = require('../lib/errors');
 const { authenticate } = require('../lib/session');
 const adminService = require('../services/admin');
 const shopsService = require('../services/shops');
+const { ordersCsv } = require('../lib/csv');
 
 module.exports = function adminRoutes(ctx) {
   const { db, env } = ctx;
@@ -48,7 +49,54 @@ module.exports = function adminRoutes(ctx) {
   r.post(
     '/shops/:id/mark-paid',
     h(async (req, res) => {
-      res.json(await adminService.markPaid(db, req.params.id));
+      const months = Math.max(1, Math.min(12, Number(req.body && req.body.months) || 1));
+      const settings = await adminService.getSettings(db);
+      const amount = Math.round(settings.monthly_price * months);
+      const invoice = await ctx.payments.createInvoice({ amount, description: `اشتراك ${months} شهر` });
+      const out = await adminService.markPaid(db, req.params.id, { months, invoice });
+      // فاتورة بريدية للمالك (NOTIF-03) — fire and forget
+      const shop = await shopsService.byId(db, req.params.id);
+      const mems = await db.query('memberships', [
+        { field: 'shop_id', value: req.params.id },
+        { field: 'role', value: 'owner' },
+      ]);
+      let ownerEmail = shop && shop.owner_email;
+      if (!ownerEmail && mems[0]) {
+        const ownerUser = await db.get('users', mems[0].user_id);
+        ownerEmail = ownerUser && ownerUser.email;
+      }
+      if (ownerEmail && ctx.mailer) {
+        ctx.mailer
+          .send({
+            to: ownerEmail,
+            ...require('../lib/mailTemplates').invoice(
+              (shop && shop.name) || '',
+              invoice.invoice_no,
+              months,
+              amount,
+              new Date(out.paid_until).toLocaleDateString('ar-EG')
+            ),
+          })
+          .catch(() => {});
+      }
+      res.json(out);
+    })
+  );
+
+  r.post(
+    '/shops/:id/plan',
+    h(async (req, res) => {
+      res.json(await adminService.setPlan(db, req.params.id, req.body && req.body.plan));
+    })
+  );
+
+  r.get(
+    '/shops/:id/orders/export',
+    h(async (req, res) => {
+      const orders = await require('../services/orders').listForShop(db, req.params.id);
+      res.set('content-type', 'text/csv; charset=utf-8');
+      res.set('content-disposition', `attachment; filename="orders-${req.params.id}.csv"`);
+      res.send(ordersCsv(orders));
     })
   );
 
