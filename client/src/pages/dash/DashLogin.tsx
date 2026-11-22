@@ -13,7 +13,49 @@ type LoginRes = {
   user?: { id: string; email: string; role: string; mfa_enabled?: boolean; mfa_enforced?: boolean };
 };
 
-/** تسجيل الدخول + استعادة كلمة المرور (SEC-01) + خطوة التحقق الثانية (SEC-03) */
+/** حقل كلمة مرور بكاشف الإظهار (Agency — إجراء حقيقي بسيط بأسلوب iOS) */
+function PassField({
+  t,
+  label,
+  autoComplete,
+  value,
+  onChange,
+  required = true,
+}: {
+  t: (k: any) => string;
+  label: string;
+  autoComplete: string;
+  value: string;
+  onChange: (v: string) => void;
+  required?: boolean;
+}) {
+  const [show, setShow] = useState(false);
+  return (
+    <Field label={label}>
+      <div className="relative">
+        <Input
+          type={show ? 'text' : 'password'}
+          dir="ltr"
+          required={required}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          autoComplete={autoComplete}
+          className="pe-20"
+        />
+        <button
+          type="button"
+          onClick={() => setShow((v) => !v)}
+          className="absolute end-2 top-1/2 -translate-y-1/2 rounded-lg px-2 py-1 text-xs font-extrabold text-teal-700"
+          aria-label={show ? t('hidePassword') : t('showPassword')}
+        >
+          {show ? t('hidePassword') : t('showPassword')}
+        </button>
+      </div>
+    </Field>
+  );
+}
+
+/** تسجيل الدخول + استعادة كلمة المرور (SEC-01) + خطوة التحقق الثانية (SEC-03) — بلغة آبل: زجاج Liquid Glass على خلفية محيطية هادئة */
 export default function DashLogin({ admin = false }: { admin?: boolean }) {
   const { lang } = useDashLang();
   const t = dashT(lang);
@@ -27,10 +69,16 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
 
   const [view, setView] = useState<'login' | 'forgot' | 'reset' | 'mfa'>('login');
   const cardRef = useRef<HTMLFormElement | null>(null);
+  const contentRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const mm = fadeInUp(cardRef.current);
     return () => mm?.revert();
   }, []);
+  // انتقال ناعم بين الوضعات (دخول/استعادة/تحقق) — سياق gsap.matchMedia يُنظف دائمًا
+  useEffect(() => {
+    const mm = fadeInUp(contentRef.current);
+    return () => mm?.revert();
+  }, [view]);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -138,18 +186,31 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
   };
 
   const frame = (children: React.ReactNode, title: string) => (
-    <div dir={dir} className="flex min-h-dvh items-center justify-center bg-[#f5f5f7] p-4">
-      <form ref={cardRef} onSubmit={view === 'mfa' ? submitChallenge : view === 'forgot' ? submitForgot : view === 'reset' ? submitReset : submitLogin} className="w-full max-w-sm rounded-3xl bg-white p-7 shadow-apple">
-        <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-600 to-teal-800 text-2xl text-white shadow-apple">▦</div>
-          <h1 className="text-xl font-extrabold text-stone-800">{title}</h1>
-          <p className="mt-1 text-xs text-stone-400">QR Menu</p>
+    <div dir={dir} className="auth-ambient flex min-h-dvh items-center justify-center p-4">
+      <div className="auth-orb auth-orb--teal" aria-hidden />
+      <div className="auth-orb auth-orb--mint" aria-hidden />
+      <div className="auth-orb auth-orb--indigo" aria-hidden />
+      <form
+        ref={cardRef}
+        onSubmit={view === 'mfa' ? submitChallenge : view === 'forgot' ? submitForgot : view === 'reset' ? submitReset : submitLogin}
+        className="auth-glass relative z-10 w-full max-w-[400px] rounded-[28px] p-8"
+      >
+        <div className="mb-7 text-center">
+          <div className="relative mx-auto mb-4 h-16 w-16">
+            <div className="absolute inset-0 scale-125 rounded-full bg-teal-400/40 blur-lg" aria-hidden />
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-gradient-to-br from-teal-500 to-teal-700 text-[26px] text-white ring-1 ring-white/40 shadow-apple">
+              ▦
+            </div>
+          </div>
+          <h1 className="text-[26px] font-black tracking-tight text-stone-900">{title}</h1>
+          <p className="mt-1.5 text-sm font-medium text-stone-500">{t('loginTagline')}</p>
         </div>
-        <div className="space-y-3">
+        <div ref={contentRef} className="space-y-3.5">
           {notice && <Ok>{notice}</Ok>}
           {children}
           {error && <Err error={error} />}
         </div>
+        <p className="mt-7 text-center text-[11px] font-semibold text-stone-400">QR Menu</p>
       </form>
     </div>
   );
@@ -162,16 +223,18 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
           <Input
             dir="ltr"
             required
+            inputMode={recoveryMode ? 'text' : 'numeric'}
             value={code}
             onChange={(e) => setCode(e.target.value)}
             placeholder={recoveryMode ? 'xxxx-xxxx' : '123456'}
             autoComplete="one-time-code"
+            className="text-center text-lg tracking-[0.45em]"
           />
         </Field>
         <button type="button" onClick={() => setRecoveryMode((v) => !v)} className="text-xs font-extrabold text-teal-700 hover:underline">
           {recoveryMode ? t('mfaUseTotp') : t('mfaUseRecovery')}
         </button>
-        <Btn type="submit" disabled={busy || !code} className="w-full py-2.5">
+        <Btn type="submit" variant="dark" disabled={busy || !code} className="w-full py-3">
           {t('signin')}
         </Btn>
       </>,
@@ -182,11 +245,13 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
   if (view === 'forgot') {
     return frame(
       <>
-        <p className="text-sm leading-relaxed text-stone-500">{t('resetSent')}</p>
+        <p className="text-sm leading-relaxed text-stone-500">{t('forgotDesc')}</p>
         <Field label={t('email')}>
           <Input type="email" dir="ltr" required value={email} onChange={(e) => setEmail(e.target.value)} />
         </Field>
-        <Btn type="submit" disabled={busy} className="w-full py-2.5">{t('signin')}</Btn>
+        <Btn type="submit" variant="dark" disabled={busy} className="w-full py-3">
+          {t('sendReset')}
+        </Btn>
         <button type="button" onClick={() => { setView('login'); setError(null); }} className="w-full text-xs font-extrabold text-teal-700 hover:underline">
           {t('backToLogin')}
         </button>
@@ -201,13 +266,11 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
         <Field label={t('resetCode')}>
           <Input dir="ltr" inputMode="numeric" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" />
         </Field>
-        <Field label={t('resetNew')}>
-          <Input type="password" dir="ltr" required value={next} onChange={(e) => setNext(e.target.value)} autoComplete="new-password" />
-        </Field>
-        <Field label={t('resetNewConfirm')}>
-          <Input type="password" dir="ltr" required value={confirm} onChange={(e) => setConfirm(e.target.value)} autoComplete="new-password" />
-        </Field>
-        <Btn type="submit" disabled={busy} className="w-full py-2.5">{t('doReset')}</Btn>
+        <PassField t={t} label={t('resetNew')} autoComplete="new-password" value={next} onChange={setNext} />
+        <PassField t={t} label={t('resetNewConfirm')} autoComplete="new-password" value={confirm} onChange={setConfirm} />
+        <Btn type="submit" variant="dark" disabled={busy} className="w-full py-3">
+          {t('doReset')}
+        </Btn>
         <button type="button" onClick={() => { setView('forgot'); setError(null); }} className="w-full text-xs font-extrabold text-teal-700 hover:underline">
           {t('forgot')}
         </button>
@@ -221,13 +284,13 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
       <Field label={t('email')}>
         <Input type="email" dir="ltr" required value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="username" />
       </Field>
-      <Field label={t('password')}>
-        <Input type="password" dir="ltr" required value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" />
-      </Field>
-      <button type="button" onClick={() => { setView('forgot'); setError(null); setNotice(null); }} className="text-start text-xs font-extrabold text-teal-700 hover:underline">
-        {t('forgot')}
-      </button>
-      <Btn type="submit" disabled={busy} className="w-full py-2.5">
+      <PassField t={t} label={t('password')} autoComplete="current-password" value={password} onChange={setPassword} />
+      <div className="flex justify-end">
+        <button type="button" onClick={() => { setView('forgot'); setError(null); setNotice(null); }} className="text-xs font-extrabold text-teal-700 hover:underline">
+          {t('forgot')}
+        </button>
+      </div>
+      <Btn type="submit" variant="dark" disabled={busy} className="w-full py-3">
         {t('signin')}
       </Btn>
     </>,
