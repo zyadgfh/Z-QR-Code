@@ -9,6 +9,7 @@ import ChangePasswordCard from '../../components/ChangePassword';
 import DiscountsCard from '../../components/DiscountsCard';
 import BackupCard from '../../components/BackupCard';
 import TaxCard from '../../components/TaxCard';
+import ReceiptCard from '../../components/ReceiptCard';
 import AuditCard from '../../components/AuditCard';
 import BranchesCard from '../../components/BranchesCard';
 import LoyaltyCard from '../../components/LoyaltyCard';
@@ -312,6 +313,7 @@ export default function DashSettings() {
       <BranchesCard />
       <LoyaltyCard />
       <TaxCard />
+      <ReceiptCard />
       <BackupCard />
       <AuditCard />
       <ChangePasswordCard />

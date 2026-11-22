@@ -96,6 +96,23 @@ function itemFields(body, partial = false) {
     weight_g = asInt(body.weight_g, { min: 0, max: 10000 });
     if (weight_g === null || weight_g === undefined) throw new HttpError(400, 'INVALID_WEIGHT', 'الوزن غير صحيح');
   }
+  // المخزون (الطور 5): stock_qty فارغ/نل = بلا تتبع؛ حد التنبيه اختياري
+  let stock_qty;
+  if (body.stock_qty !== undefined) {
+    if (body.stock_qty === null || body.stock_qty === '') stock_qty = null;
+    else {
+      stock_qty = asInt(body.stock_qty, { min: 0, max: 100000 });
+      if (stock_qty === null || stock_qty === undefined) throw new HttpError(400, 'INVALID_STOCK', 'الكمية غير صحيحة (0-100000 أو فارغة بلا تتبع)');
+    }
+  }
+  let low_stock_threshold;
+  if (body.low_stock_threshold !== undefined) {
+    if (body.low_stock_threshold === null || body.low_stock_threshold === '') low_stock_threshold = null;
+    else {
+      low_stock_threshold = asInt(body.low_stock_threshold, { min: 0, max: 1000 });
+      if (low_stock_threshold === null || low_stock_threshold === undefined) throw new HttpError(400, 'INVALID_STOCK', 'حد التنبيه غير صحيح');
+    }
+  }
   const out2 = {
     name,
     price,
@@ -108,6 +125,8 @@ function itemFields(body, partial = false) {
     allergens: allergens === undefined ? undefined : allergens,
     calories: calories === undefined ? undefined : calories,
     weight_g: weight_g === undefined ? undefined : weight_g,
+    stock_qty: stock_qty === undefined ? undefined : stock_qty,
+    low_stock_threshold: low_stock_threshold === undefined ? undefined : low_stock_threshold,
   };
   if (partial) for (const k of Object.keys(out2)) if (out2[k] === undefined) delete out2[k];
   return out2;
@@ -280,6 +299,8 @@ async function listFull(db, shopId) {
       allergens: i.allergens || [],
       calories: i.calories ?? null,
       weight_g: i.weight_g ?? null,
+      stock_qty: i.stock_qty ?? null,
+      low_stock_threshold: i.low_stock_threshold ?? null,
       groups: groupsByItem.get(i.id) || [],
     })),
   };
@@ -318,7 +339,14 @@ async function publicMenu(db, slug) {
     branches: await branches.listPublic(db, shop.id),
     categories: full.categories,
     // النافد اليوم يظهر معتيمًا (sold_out) والمخفي نهائيًا يختفي (available=false)
-    items: full.items.filter((i) => i.available !== false).map((i) => ({ ...i })),
+    // المخزون (الطور 5): نفاد الكمية = نفد اليوم تلقائيًا (بلا كشف أرقام المخزون للزبون)
+    items: full.items
+      .filter((i) => i.available !== false)
+      .map((i) => {
+        const stockTracked = i.stock_qty !== null && i.stock_qty !== undefined;
+        const { stock_qty, low_stock_threshold, ...pub } = i;
+        return { ...pub, sold_out: i.sold_out === true || (stockTracked && i.stock_qty <= 0) };
+      }),
   };
 }
 

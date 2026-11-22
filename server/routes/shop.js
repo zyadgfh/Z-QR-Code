@@ -263,6 +263,13 @@ module.exports = function shopRoutes(ctx) {
   );
 
   // ---------- الإعدادات + رفع الصور (مالك فقط) ----------
+  r.get(
+    '/settings',
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      res.json(await shopsService.byId(db, req.member.shop_id));
+    })
+  );
   r.put(
     '/settings',
     h(async (req, res) => {

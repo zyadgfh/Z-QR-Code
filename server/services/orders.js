@@ -88,6 +88,13 @@ async function createPublicOrder(db, slug, payload = {}) {
     if (!item) throw new HttpError(400, 'INVALID_ITEM', 'أحد الأصناف غير موجود في هذا المحل');
     if (item.available === false) throw new HttpError(400, 'ITEM_UNAVAILABLE', `«${item.name}» غير متاح حاليًا`);
     if (item.sold_out === true) throw new HttpError(400, 'ITEM_SOLD_OUT', `«${item.name}» نفد اليوم — جرّب صنفًا آخر`);
+    // المخزون (الطور 5): الصنف المتتبع — نفاد أو كمية غير كافية تُرفض خادميًا
+    const stockTracked = item.stock_qty !== null && item.stock_qty !== undefined;
+    if (stockTracked) {
+      if (item.stock_qty <= 0) throw new HttpError(400, 'ITEM_SOLD_OUT', `«${item.name}» نفدت كميته — جرّب صنفًا آخر`);
+      if (qty > item.stock_qty)
+        throw new HttpError(400, 'INSUFFICIENT_STOCK', `«${item.name}» المتاح ${item.stock_qty} فقط`);
+    }
 
     // الخيارات المختارة
     let chosenIds = raw.option_ids === undefined ? [] : raw.option_ids;
@@ -216,6 +223,13 @@ async function createPublicOrder(db, slug, payload = {}) {
     items: snapshots,
   };
   await db.set('orders', id, order);
+  // خصم المخزون (الطور 5) — بعد نجاح الإنشاء حصرًا (الطلبات المرفوضة لا تخصم)
+  for (const snap of snapshots) {
+    const it = itemsById.get(snap.item_id);
+    if (it && it.stock_qty !== null && it.stock_qty !== undefined) {
+      await db.update('items', it.id, { stock_qty: Math.max(0, it.stock_qty - snap.qty) });
+    }
+  }
   // كسب نقاط الولاء من الإجمالي النهائي — مرة واحدة لكل طلب (F-17)
   const pointsEarned = await loyalty.credit(db, shop, customerPhone, grandTotal);
   if (pointsEarned > 0) await db.update('orders', id, { points_earned: pointsEarned, loyalty_credited: true });

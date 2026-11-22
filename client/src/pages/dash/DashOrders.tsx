@@ -30,6 +30,14 @@ export default function DashOrders() {
   // الصوت: مفعّل بعد أول لمسة، ومحفوظ لزيارات لاحقة
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem('qm-sound') === '1');
   const pendingCount = useMemo(() => orders?.filter((o) => o.status === 'pending').length ?? 0, [orders]);
+  // ملاحظة الإيصال (الطور 5) — فشل الجلب (صلاحية) يعني طباعة بلا ختامية
+  const [receiptNote, setReceiptNote] = useState('');
+  useEffect(() => {
+    api<any>('/api/shop/settings')
+      .then((st) => setReceiptNote(String(st.receipt_note || '')))
+      .catch(() => {});
+  }, []);
+  const shopName = useAuth((s) => s.me?.memberships[0]?.shop.name) || '';
   const prevPending = useRef<number | null>(null);
 
   // دخول متدرج للبطاقات عند أول تحميل وكل وصول دفعة طلبات جديدة
@@ -167,14 +175,14 @@ export default function DashOrders() {
         </div>
       )}
 
-      <Group title={`🔴 ${t('newOrders')}`} orders={pending} tone="red" now={now} t={t} lang={lang} onAccept={(o) => { setAccepting(o); setEta(15); }} onStage={(o, s) => act(() => api(`/api/shop/orders/${o.id}/stage`, { method: 'POST', body: { stage: s } }))} />
-      <Group title={`👨‍🍳 ${t('preparing')}`} orders={preparing} tone="sky" now={now} t={t} lang={lang} onStage={(o, s) => act(() => api(`/api/shop/orders/${o.id}/stage`, { method: 'POST', body: { stage: s } }))} />
-      <Group title={`✅ ${t('ready')}`} orders={ready} tone="green" now={now} t={t} lang={lang} onStage={(o, s) => act(() => api(`/api/shop/orders/${o.id}/stage`, { method: 'POST', body: { stage: s } }))} />
+      <Group title={`🔴 ${t('newOrders')}`} orders={pending} tone="red" now={now} t={t} lang={lang} onAccept={(o) => { setAccepting(o); setEta(15); }} onStage={(o, s) => act(() => api(`/api/shop/orders/${o.id}/stage`, { method: 'POST', body: { stage: s } }))} shopName={shopName} receiptNote={receiptNote} />
+      <Group title={`👨‍🍳 ${t('preparing')}`} orders={preparing} tone="sky" now={now} t={t} lang={lang} onStage={(o, s) => act(() => api(`/api/shop/orders/${o.id}/stage`, { method: 'POST', body: { stage: s } }))} shopName={shopName} receiptNote={receiptNote} />
+      <Group title={`✅ ${t('ready')}`} orders={ready} tone="green" now={now} t={t} lang={lang} onStage={(o, s) => act(() => api(`/api/shop/orders/${o.id}/stage`, { method: 'POST', body: { stage: s } }))} shopName={shopName} receiptNote={receiptNote} />
       {done.length > 0 && (
         <details className="rounded-3xl bg-white p-4 shadow-sm">
           <summary className="cursor-pointer text-sm font-extrabold text-stone-500">✔️ {t('done')} ({done.length})</summary>
           <div className="mt-3 space-y-2 opacity-70">
-            {done.map((o) => <OrderCard key={o.id} o={o} now={now} t={t} lang={lang} />)}
+            {done.map((o) => <OrderCard key={o.id} o={o} now={now} t={t} lang={lang} shopName={shopName} receiptNote={receiptNote} />)}
           </div>
         </details>
       )}
@@ -211,6 +219,46 @@ const TONES: Record<string, string> = {
   green: '!border-green-200 !bg-green-50/70',
 };
 
+/** طباعة إيصال الطلب (الطور 5) — نافذة طباعة معزولة بتنسيق إيصال */
+function printReceipt(o: Order, shopName: string, note: string) {
+  const esc = (v: unknown) => String(v ?? '').replace(/[<>&"]/g, (c) => ({ '<': '&lt;', '>': '&gt;', '&': '&amp;', '"': '&quot;' }[c] as string));
+  const L = o.items
+    .map(
+      (i) => `<tr>
+      <td>${esc(i.qty)} × ${esc(i.name)}</td>
+      <td style="text-align:left">${i.line_total}</td>
+    </tr>${i.options.length ? `<tr><td colspan="2" style="font-size:10px;color:#555">+ ${i.options.map((x) => esc(x.option_name)).join(' · ')}</td></tr>` : ''}`
+    )
+    .join('');
+  const rows = [
+    o.subtotal != null ? `<tr><td>المجموع قبل الخصم</td><td style="text-align:left">${o.subtotal}</td></tr>` : '',
+    o.discount_amount ? `<tr><td>خصم ${esc(o.discount_code || '')}</td><td style="text-align:left">− ${o.discount_amount}</td></tr>` : '',
+    o.loyalty_discount ? `<tr><td>خصم النقاط</td><td style="text-align:left">− ${o.loyalty_discount}</td></tr>` : '',
+    o.tax_total ? `<tr><td>الضريبة (${o.tax_percent ?? 0}%)</td><td style="text-align:left">${o.tax_total}</td></tr>` : '',
+    o.delivery_fee ? `<tr><td>رسوم التوصيل</td><td style="text-align:left">${o.delivery_fee}</td></tr>` : '',
+    o.tip ? `<tr><td>إكرامية</td><td style="text-align:left">${o.tip}</td></tr>` : '',
+  ].join('');
+  const w = window.open('', '_blank', 'width=380,height=560');
+  if (!w) return;
+  w.document.write(`<!doctype html><html dir="rtl" lang="ar"><head><meta charset="utf-8"><title>${esc(shopName)} — إيصال</title>
+  <style>
+    body{font-family:system-ui,'Cairo',sans-serif;max-width:320px;margin:16px auto;color:#111}
+    h2{margin:0 0 2px;text-align:center} .sub{text-align:center;color:#555;font-size:12px;margin-bottom:10px}
+    table{width:100%;border-collapse:collapse;font-size:13px} td{padding:3px 0}
+    .total td{font-weight:900;border-top:1px dashed #999;padding-top:6px;font-size:15px}
+    .note{margin-top:10px;text-align:center;font-size:12px;color:#444;white-space:pre-wrap}
+  </style></head><body>
+  <h2>${esc(shopName)}</h2>
+  <div class="sub">#${esc(o.id.slice(0, 8))} · ${new Date(o.created_at).toLocaleString('ar-EG')}${o.table_number ? ` · ترابيزة ${o.table_number}` : ''}${o.branch_name ? ` · ${esc(o.branch_name)}` : ''}</div>
+  <table>${L}</table><br/>
+  <table>${rows}<tr class="total"><td>الإجمالي</td><td style="text-align:left">${o.total} ج.م</td></tr></table>
+  ${note ? `<div class="note">${esc(note)}</div>` : ''}
+  </body></html>`);
+  w.document.close();
+  w.focus();
+  w.print();
+}
+
 function Group({
   title,
   orders,
@@ -220,6 +268,8 @@ function Group({
   lang,
   onAccept,
   onStage,
+  shopName,
+  receiptNote,
 }: {
   title: string;
   orders: Order[];
@@ -229,6 +279,8 @@ function Group({
   lang: 'ar' | 'en';
   onAccept?: (o: Order) => void;
   onStage: (o: Order, stage: 'ready' | 'done') => void;
+  shopName: string;
+  receiptNote: string;
 }) {
   if (!orders.length) return null;
   return (
@@ -236,7 +288,7 @@ function Group({
       <h3 className="mb-2 text-sm font-extrabold text-stone-600">{title} ({orders.length})</h3>
       <div className="grid gap-3 sm:grid-cols-2">
         {orders.map((o) => (
-          <OrderCard key={o.id} o={o} now={now} t={t} lang={lang} tone={tone} onAccept={onAccept} onStage={onStage} />
+          <OrderCard key={o.id} o={o} now={now} t={t} lang={lang} tone={tone} onAccept={onAccept} onStage={onStage} shopName={shopName} receiptNote={receiptNote} />
         ))}
       </div>
     </section>
@@ -251,6 +303,8 @@ function OrderCard({
   tone,
   onAccept,
   onStage,
+  shopName,
+  receiptNote,
 }: {
   o: Order;
   now: number;
@@ -259,6 +313,8 @@ function OrderCard({
   tone?: 'red' | 'sky' | 'green';
   onAccept?: (o: Order) => void;
   onStage?: (o: Order, stage: 'ready' | 'done') => void;
+  shopName: string;
+  receiptNote: string;
 }) {
   return (
     <div data-card className={`rounded-3xl border border-black/[0.04] bg-white p-4 shadow-apple ${tone ? TONES[tone] : ''}`}>
@@ -305,6 +361,7 @@ function OrderCard({
         </div>
       )}
       <div className="mt-3 flex gap-2">
+        <Btn variant="ghost" onClick={() => printReceipt(o, shopName, receiptNote)}>🖨</Btn>
         {o.status === 'pending' && onAccept && (
           <Btn className="flex-1" onClick={() => onAccept(o)}>✓ {t('accept')}</Btn>
         )}
