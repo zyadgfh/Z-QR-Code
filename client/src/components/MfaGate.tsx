@@ -9,6 +9,17 @@ import { fadeInUp, popIn } from '../lib/anim';
 
 type Setup = { secret: string; otpauth: string };
 
+/** كرات الضوء المحيطية (Liquid Glass) — زخرفة معلنة aria-hidden تتوقف مع reduced-motion */
+function Ambient() {
+  return (
+    <>
+      <div className="auth-orb auth-orb--teal" aria-hidden />
+      <div className="auth-orb auth-orb--mint" aria-hidden />
+      <div className="auth-orb auth-orb--indigo" aria-hidden />
+    </>
+  );
+}
+
 /**
  * بوابة التفعيل الإلزامي للتحقق بخطوتين (SEC-03) — تُعرض لحساب owner/platform_admin
  * قبل الوصول للوحة، ويعاد استخدام تدفقها في بطاقة الأمان للموظفين (prop variant="card").
@@ -86,15 +97,17 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
     }
   };
 
-  const shell = variant === 'gate' ? 'min-h-dvh flex items-center justify-center bg-[#f5f5f7] p-4' : '';
+  const shell = variant === 'gate' ? 'auth-ambient relative flex min-h-dvh items-center justify-center overflow-hidden p-4' : '';
+  const glass = variant === 'gate' ? 'auth-glass relative z-10 rounded-[28px] p-8' : 'rounded-3xl bg-white p-7 shadow-apple';
 
   if (recovery) {
     return (
       <div className={shell}>
-        <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-apple">
+        {variant === 'gate' && <Ambient />}
+        <div className={`${glass} w-full max-w-md`}>
           <h2 className="text-lg font-extrabold text-stone-900">🔑 {t('mfaRecoveryTitle')}</h2>
           <p className="mt-1 text-sm text-stone-500">{t('mfaRecoveryDesc')}</p>
-          <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-[#f5f5f7] p-4" dir="ltr">
+          <div className="mt-4 grid grid-cols-2 gap-2 rounded-2xl bg-[#f5f5f7] p-4 ring-1 ring-black/5" dir="ltr">
             {recovery.map((c) => (
               <code key={c} className="font-mono text-sm font-bold text-teal-800">{c}</code>
             ))}
@@ -117,12 +130,19 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
 
   return (
     <div className={shell}>
-      <div ref={cardRef} className="w-full max-w-md rounded-3xl bg-white p-7 shadow-apple">
-        <h2 className="text-lg font-extrabold text-stone-900">🔐 {t('mfaGateTitle')}</h2>
-        <p className="mt-1 text-sm leading-relaxed text-stone-500">{t('mfaGateDesc')}</p>
+      {variant === 'gate' && <Ambient />}
+      <div ref={cardRef} className={`${glass} w-full max-w-md`}>
+        <div className="mb-5 text-center">
+          <div className="relative mx-auto mb-4 h-16 w-16">
+            <div className="absolute inset-0 scale-125 rounded-full bg-teal-400/40 blur-lg" aria-hidden />
+            <div className="relative flex h-16 w-16 items-center justify-center rounded-[1.4rem] bg-gradient-to-br from-teal-500 to-teal-700 text-2xl text-white ring-1 ring-white/40 shadow-apple">🔐</div>
+          </div>
+          <h2 className="text-[26px] font-black tracking-tight text-stone-900">{t('mfaGateTitle')}</h2>
+          <p className="mx-auto mt-1.5 max-w-xs text-sm leading-relaxed text-stone-500">{t('mfaGateDesc')}</p>
+        </div>
         {qr && setup && (
           <div ref={qrRef} className="mt-4 flex flex-col items-center gap-3">
-            <img src={qr} alt="TOTP QR" className="rounded-2xl border border-black/5" width={200} height={200} />
+            <img src={qr} alt="TOTP QR" className="rounded-[1.4rem] bg-white p-2.5 shadow-apple ring-1 ring-black/5" width={200} height={200} />
             <div className="text-center">
               <p className="text-xs font-bold text-stone-400">{t('mfaManual')}</p>
               <code className="mt-1 block break-all rounded-xl bg-[#f5f5f7] px-3 py-2 font-mono text-xs text-stone-700" dir="ltr">
@@ -135,7 +155,7 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
               </Field>
             </div>
             {error && <Err error={error} />}
-            <Btn disabled={busy || code.length !== 6} onClick={verify} className="w-full py-2.5">
+            <Btn disabled={busy || code.length !== 6} onClick={verify} variant="dark" className="w-full py-3">
               {t('mfaEnable')}
             </Btn>
           </div>
