@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../lib/api';
 import { dashT } from '../lib/i18n';
 import { useDashLang } from '../stores/dashlang';
 import { Btn, Err, Field, Input, Select } from './ui';
+import { fadeInUp, staggerCards } from '../lib/anim';
 
 type Discount = {
   id: string;
@@ -30,6 +31,8 @@ export default function DiscountsCard() {
   const [expiryDays, setExpiryDays] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const listRef = useRef<HTMLUListElement | null>(null);
 
   const load = async () => {
     try {
@@ -41,7 +44,12 @@ export default function DiscountsCard() {
 
   useEffect(() => {
     load();
+    fadeInUp(cardRef.current);
   }, []);
+
+  useEffect(() => {
+    if (list?.length) staggerCards(listRef.current);
+  }, [list]);
 
   const create = async () => {
     setBusy(true);
@@ -80,7 +88,7 @@ export default function DiscountsCard() {
   };
 
   return (
-    <div className="rounded-3xl bg-white p-5 shadow-sm">
+    <div ref={cardRef} className="rounded-3xl bg-white p-5 shadow-sm">
       <div className="mb-3 flex items-center justify-between">
         <h3 className="text-sm font-black text-stone-400">🏷 {t('discounts')}</h3>
         <Btn variant="soft" onClick={() => setOpen((v) => !v)}>＋ {t('addDiscount')}</Btn>
@@ -123,9 +131,9 @@ export default function DiscountsCard() {
       ) : list.length === 0 ? (
         <p className="text-sm text-stone-400">{t('noDiscounts')}</p>
       ) : (
-        <ul className="space-y-2">
+        <ul ref={listRef} className="space-y-2">
           {list.map((d) => (
-            <li key={d.id} className="flex items-center gap-3 rounded-2xl bg-[#f5f5f7] px-3 py-2.5">
+            <li key={d.id} data-card className="flex items-center gap-3 rounded-2xl bg-[#f5f5f7] px-3 py-2.5">
               <code className="rounded-lg bg-white px-2 py-1 font-mono text-sm font-black text-teal-800" dir="ltr">{d.code}</code>
               <span className="text-sm font-extrabold text-stone-700">
                 {d.type === 'percent' ? `${d.value}%` : `${d.value} ${lang === 'ar' ? 'ج.م' : 'EGP'}`}

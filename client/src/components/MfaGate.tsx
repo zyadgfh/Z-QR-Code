@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { api } from '../lib/api';
 import { useAuth } from '../stores/auth';
 import { dashT } from '../lib/i18n';
 import { useDashLang } from '../stores/dashlang';
 import { Btn, Err, Field, Input, Ok } from './ui';
+import { fadeInUp, popIn } from '../lib/anim';
 
 type Setup = { secret: string; otpauth: string };
 
@@ -24,6 +25,8 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
   const [confirmed, setConfirmed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const cardRef = useRef<HTMLDivElement | null>(null);
+  const qrRef = useRef<HTMLDivElement | null>(null);
   const [okMsg, setOkMsg] = useState<string | null>(null);
 
   const start = async () => {
@@ -42,9 +45,14 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
   useEffect(() => {
     // البوابة الإلزامية (SEC-03/Q7) تبدأ الإعداد تلقائيًا — كان يبدأ فقط في وضع البطاقة
     // فعلِقت بوابة الإنتاج على «…» بلا زر (أُكتشف في أول دخول إنتاجي فعلي).
+    fadeInUp(cardRef.current);
     start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (qr) popIn(qrRef.current);
+  }, [qr]);
 
   const verify = async () => {
     setBusy(true);
@@ -108,11 +116,11 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
 
   return (
     <div className={shell}>
-      <div className="w-full max-w-md rounded-3xl bg-white p-7 shadow-apple">
+      <div ref={cardRef} className="w-full max-w-md rounded-3xl bg-white p-7 shadow-apple">
         <h2 className="text-lg font-extrabold text-stone-900">🔐 {t('mfaGateTitle')}</h2>
         <p className="mt-1 text-sm leading-relaxed text-stone-500">{t('mfaGateDesc')}</p>
         {qr && setup && (
-          <div className="mt-4 flex flex-col items-center gap-3">
+          <div ref={qrRef} className="mt-4 flex flex-col items-center gap-3">
             <img src={qr} alt="TOTP QR" className="rounded-2xl border border-black/5" width={200} height={200} />
             <div className="text-center">
               <p className="text-xs font-bold text-stone-400">{t('mfaManual')}</p>
