@@ -11,6 +11,11 @@ type Status = {
   eta_minutes: number | null;
   created_at: number;
   table_number: number;
+  service?: 'dine_in' | 'takeaway' | 'delivery';
+  branch_name: string | null;
+  customer_phone: string | null;
+  points_earned?: number;
+  loyalty_discount: number;
   total: number;
   items: { name: string; name_en: string | null; qty: number; unit_price: number; options: { group_name: string; option_name: string; price_delta: number }[]; line_total: number }[];
   note: string;
@@ -24,6 +29,9 @@ export default function OrderStatus() {
   const [st, setSt] = useState<Status | null>(null);
   const [gone, setGone] = useState(false);
   const [now, setNow] = useState(Date.now());
+  // تسجيل هاتف الزبون الجالس (F-17) لكسب النقاط
+  const [regPhone, setRegPhone] = useState('');
+  const [phoneSaved, setPhoneSaved] = useState(false);
 
   const checkRef = useRef<HTMLParagraphElement>(null);
   const busyRef = useRef<HTMLDivElement>(null);
@@ -83,8 +91,13 @@ export default function OrderStatus() {
           ‹ {t('back')}
         </Link>
         <h1 className="flex-1 text-[17px] font-extrabold text-stone-900">{st.shop?.name}</h1>
+        {st.branch_name && (
+          <span className="rounded-full bg-white/80 px-3 py-1 text-xs font-extrabold text-stone-600 shadow-sm backdrop-blur">
+            🏢 {st.branch_name}
+          </span>
+        )}
         <span className="rounded-full bg-teal-700 px-3 py-1 text-xs font-extrabold text-white">
-          {t('table')} {st.table_number}
+          {st.table_number ? `${t('table')} ${st.table_number}` : st.service === 'delivery' ? '🛵' : st.service === 'takeaway' ? '🥡' : ''}
         </span>
       </header>
 
@@ -139,12 +152,69 @@ export default function OrderStatus() {
             ))}
           </div>
           {st.note && <p className="mt-2 rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold text-amber-800">📝 {st.note}</p>}
+          {st.loyalty_discount > 0 && (
+            <div className="mt-2 flex justify-between text-sm font-bold text-teal-700">
+              <span>⭐ {t('loyaltyDiscount')}</span>
+              <span>− {money(lang, st.loyalty_discount)}</span>
+            </div>
+          )}
+          {st.total !== lineSum(st) && (
+            <div className="mt-2 flex justify-between text-sm font-bold text-stone-500">
+              <span>{t('subtotalRow')}</span>
+              <span>{money(lang, lineSum(st))}</span>
+            </div>
+          )}
           <div className="mt-3 flex justify-between border-t border-stone-100 pt-2 font-extrabold text-stone-900">
             <span>{t('total')}</span>
             <span>{money(lang, st.total)}</span>
           </div>
+          {(st.points_earned || 0) > 0 && (
+            <div className="mt-2 rounded-xl bg-teal-50 px-3 py-2 text-center text-xs font-black text-teal-800" dir="auto">
+              ⭐ +{st.points_earned} {t('pointsEarnedHere')}
+            </div>
+          )}
         </div>
+
+        {/* تسجيل الهاتف للزبون الجالس — لكسب نقاط الولاء */}
+        {st.table_number > 0 && !st.customer_phone && !phoneSaved && (
+          <div className="mt-4 rounded-[22px] border border-black/[0.04] bg-white p-4 shadow-apple">
+            <p className="mb-2 text-sm font-extrabold text-stone-700">⭐ {t('phoneRegTitle')}</p>
+            <div className="flex gap-2">
+              <input
+                value={regPhone}
+                onChange={(e) => setRegPhone(e.target.value.slice(0, 20))}
+                placeholder={t('customerPhone')}
+                inputMode="tel"
+                dir="ltr"
+                className="flex-1 rounded-2xl border border-stone-200 p-2.5 text-sm outline-none focus:border-teal-600"
+              />
+              <button
+                onClick={async () => {
+                  if (regPhone.trim().length < 6) return;
+                  try {
+                    await api(`/api/public/orders/${orderId}/phone`, { method: 'PUT', body: { phone: regPhone.trim() } });
+                    setPhoneSaved(true);
+                  } catch {
+                    /* تجاهل — المحاولة لاحقًا */
+                  }
+                }}
+                className="rounded-2xl bg-teal-700 px-4 text-sm font-extrabold text-white transition active:scale-95"
+              >
+                {t('save')}
+              </button>
+            </div>
+            <p className="mt-1.5 text-[11px] font-bold text-stone-400">{t('phoneRegNote')}</p>
+          </div>
+        )}
+        {phoneSaved && (
+          <p className="mt-3 rounded-xl bg-teal-50 px-3 py-2 text-center text-xs font-black text-teal-800">✓ {t('phoneSaved')}</p>
+        )}
       </div>
     </div>
   );
+}
+
+/** مجموع الأسطر قبل الخصومات — لعرض صف المجموع الجزئي عند وجود خصم/رسوم */
+function lineSum(st: Status) {
+  return Math.round(st.items.reduce((s, i) => s + i.line_total, 0) * 100) / 100;
 }

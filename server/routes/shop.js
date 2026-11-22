@@ -12,6 +12,8 @@ const adminService = require('../services/admin');
 const aiService = require('../services/ai');
 const { parseDataUrl } = require('../services/ai');
 const discountsService = require('../services/discounts');
+const branchesService = require('../services/branches');
+const loyaltyService = require('../services/loyalty');
 const { ordersCsv } = require('../lib/csv');
 
 module.exports = function shopRoutes(ctx) {
@@ -65,6 +67,22 @@ module.exports = function shopRoutes(ctx) {
     if (req.member.role !== 'owner') {
       throw new HttpError(403, 'FORBIDDEN', 'هذه الصفحة لمالك المحل فقط');
     }
+  }
+
+  // مصفوفة الصلاحيات (F-12): المالك يمرر دائمًا؛ الموظف بحسب مصفوفته — الفرض خادمي لا واجهي
+  function hasPerm(req, key) {
+    if (req.member.role === 'owner') return true;
+    const perms = req.member.perms || { orders: true, menu: false, settings: false, prices: false };
+    return perms[key] === true;
+  }
+  function requirePerm(req, key, msg) {
+    if (!hasPerm(req, key)) throw new HttpError(403, 'PERM_REQUIRED', msg || `هذا الإجراء يحتاج صلاحية: ${key}`);
+  }
+  // يحتاج صلاحية الأسعار إن لمس الحقل المرسل الأسعار
+  const PRICE_FIELDS = ['price', 'price_delta'];
+  function requirePermDeep(req, key, keys, body) {
+    const touchesPrice = keys.some((k) => body && body[k] !== undefined);
+    requirePerm(req, touchesPrice ? 'prices' : key);
   }
 
   // ---------- ملخص المحل (الكل: مالك + موظف) ----------
@@ -155,7 +173,7 @@ module.exports = function shopRoutes(ctx) {
   r.get(
     '/menu',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'menu');
       res.json(await menuService.listFull(db, req.member.shop_id));
     })
   );
@@ -163,21 +181,21 @@ module.exports = function shopRoutes(ctx) {
   r.post(
     '/categories',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'menu');
       res.status(201).json(await menuService.createCategory(db, req.member.shop_id, req.body || {}));
     })
   );
   r.put(
     '/categories/:id',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'menu');
       res.json(await menuService.updateCategory(db, req.member.shop_id, req.params.id, req.body || {}));
     })
   );
   r.delete(
     '/categories/:id',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'menu');
       await menuService.deleteCategory(db, req.member.shop_id, req.params.id);
       res.json({ ok: true });
     })
@@ -186,21 +204,23 @@ module.exports = function shopRoutes(ctx) {
   r.post(
     '/items',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'prices', 'إنشاء أصناف بأسعار يحتاج صلاحية الأسعار');
       res.status(201).json(await menuService.createItem(db, req.member.shop_id, req.body || {}));
     })
   );
   r.put(
     '/items/:id',
     h(async (req, res) => {
-      ownerOnly(req);
-      res.json(await menuService.updateItem(db, req.member.shop_id, req.params.id, req.body || {}));
+      // تحديث بلا لمس السعر = صلاحية منيو؛ لمس السعر يحتاج صلاحية أسعار (قبول F-12)
+      const body = req.body || {};
+      requirePermDeep(req, 'menu', ['price'], body);
+      res.json(await menuService.updateItem(db, req.member.shop_id, req.params.id, body));
     })
   );
   r.delete(
     '/items/:id',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'menu');
       await menuService.deleteItem(db, req.member.shop_id, req.params.id);
       res.json({ ok: true });
     })
@@ -209,22 +229,26 @@ module.exports = function shopRoutes(ctx) {
   r.post(
     '/items/:id/groups',
     h(async (req, res) => {
-      ownerOnly(req);
-      res.status(201).json(await menuService.saveGroup(db, req.member.shop_id, req.params.id, null, req.body || {}));
+      const body = req.body || {};
+      if ((body.options || []).some((o) => Number(o && o.price_delta) !== 0)) requirePerm(req, 'prices', 'خيارات بفروق أسعار تحتاج صلاحية الأسعار');
+      else requirePerm(req, 'menu');
+      res.status(201).json(await menuService.saveGroup(db, req.member.shop_id, req.params.id, null, body));
     })
   );
   r.put(
     '/groups/:id',
     h(async (req, res) => {
-      ownerOnly(req);
+      const body = req.body || {};
+      if ((body.options || []).some((o) => Number(o && o.price_delta) !== 0)) requirePerm(req, 'prices', 'خيارات بفروق أسعار تحتاج صلاحية الأسعار');
+      else requirePerm(req, 'menu');
       const group = await menuService.mustOwn(db, 'option_groups', req.params.id, req.member.shop_id);
-      res.json(await menuService.saveGroup(db, req.member.shop_id, group.item_id, req.params.id, req.body || {}));
+      res.json(await menuService.saveGroup(db, req.member.shop_id, group.item_id, req.params.id, body));
     })
   );
   r.delete(
     '/groups/:id',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'menu');
       await menuService.deleteGroup(db, req.member.shop_id, req.params.id);
       res.json({ ok: true });
     })
@@ -234,7 +258,7 @@ module.exports = function shopRoutes(ctx) {
   r.put(
     '/settings',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'settings');
       res.json(await shopsService.updateSettings(db, req.member.shop_id, req.body || {}));
     })
   );
@@ -242,7 +266,7 @@ module.exports = function shopRoutes(ctx) {
   r.post(
     '/uploads',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'settings');
       const parsed = parseDataUrl(req.body && req.body.dataUrl);
       if (!parsed) throw new HttpError(400, 'INVALID_IMAGE', 'صورة غير صالحة (JPG/PNG/WebP حتى 4MB)');
       const filename = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${parsed.mime.split('/')[1]}`;
@@ -255,7 +279,7 @@ module.exports = function shopRoutes(ctx) {
   r.post(
     '/menu/translate',
     h(async (req, res) => {
-      ownerOnly(req);
+      requirePerm(req, 'menu');
       const full = await menuService.listFull(db, req.member.shop_id);
       const proposal = await aiService.translateMenu({
         items: full.items,
@@ -340,6 +364,72 @@ module.exports = function shopRoutes(ctx) {
       ownerOnly(req);
       await shopsService.removeStaff(db, req.member.shop_id, req.params.userId);
       res.json({ ok: true });
+    })
+  );
+
+  // ---------- مصفوفة صلاحيات الموظفين (F-12) — المالك فقط ----------
+  r.put(
+    '/staff/:userId/perms',
+    h(async (req, res) => {
+      ownerOnly(req);
+      res.json(await shopsService.setStaffPerms(db, req.member.shop_id, req.params.userId, req.body || {}));
+    })
+  );
+
+  // ---------- الفروع (F-04) — صلاحية الإعدادات ----------
+  r.get(
+    '/branches',
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      res.json(await branchesService.listForShop(db, req.member.shop_id));
+    })
+  );
+  r.post(
+    '/branches',
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      res.status(201).json(await branchesService.create(db, req.member.shop_id, req.body || {}));
+    })
+  );
+  r.put(
+    '/branches/:id',
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      res.json(await branchesService.patchBranch(db, req.member.shop_id, req.params.id, req.body || {}));
+    })
+  );
+  r.delete(
+    '/branches/:id',
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      res.json(await branchesService.remove(db, req.member.shop_id, req.params.id));
+    })
+  );
+
+  // ---------- استيراد منيو CSV (F-13) — قالب + رفع بمعاينة؛ الإنشاء بأسعار يحتاج صلاحية الأسعار ----------
+  r.get(
+    '/menu/import-template',
+    h(async (req, res) => {
+      requirePerm(req, 'menu');
+      res.set('content-type', 'text/csv; charset=utf-8');
+      res.set('content-disposition', 'attachment; filename="menu-template.csv"');
+      res.send('\uFEFFname,name_en,price,category,description,calories,weight_g,allergens,sold_out\nشاي بالنعناع,Mint Tea,15,مشروبات,شاي أخضر طازج,10,250,لا يوجد,no\n');
+    })
+  );
+  r.post(
+    '/menu/import',
+    h(async (req, res) => {
+      requirePerm(req, 'prices', 'الاستيراد ينشئ أصنافًا بأسعار — يحتاج صلاحية الأسعار');
+      res.json(await menuService.importMenu(db, req.member.shop_id, req.body && req.body.csv, { dry_run: (req.body && req.body.dry_run) === true }));
+    })
+  );
+
+  // ---------- حسابات الولاء (F-17) — صلاحية الإعدادات ----------
+  r.get(
+    '/loyalty/accounts',
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      res.json(await loyaltyService.listAccounts(db, req.member.shop_id, 50));
     })
   );
 

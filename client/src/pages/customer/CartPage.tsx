@@ -23,8 +23,14 @@ export default function CartPage() {
   const [service, setService] = useState<'takeaway' | 'delivery' | null>(null);
   const [phone, setPhone] = useState('');
   const [discountCode, setDiscountCode] = useState('');
+  // الولاء (F-17): رصيد بالهاتف + استرداد اختياري
+  const [loy, setLoy] = useState<{ points: number; redeem_value: number; max_percent: number } | null>(null);
+  const [redeem, setRedeem] = useState('');
   const listRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
+  const branchId = useCart((s) => s.branchBySlug[slug] || '');
+  const branches = useCart((s) => s.branchesBySlug[slug] || []);
+  const setBranch = useCart((s) => s.setBranch);
 
   const lang = (new URLSearchParams(location.search).get('lang') as Lang) || 'ar';
   const t = custT(lang);
@@ -36,6 +42,21 @@ export default function CartPage() {
 
   const total = Math.round(lines.reduce((s, l) => s + lineTotal(l), 0) * 100) / 100;
   const canSend = Boolean(lines.length) && (Boolean(table) || service === 'takeaway' || service === 'delivery');
+
+  // رصيد الولاء عند توفر الهاتف (مسار مقيّد بالمعدل — بتهدئة بسيطة)
+  useEffect(() => {
+    const ph = phone.trim();
+    if (!ph || ph.length < 6) {
+      setLoy(null);
+      return;
+    }
+    const id = setTimeout(() => {
+      api<any>(`/api/public/shops/${slug}/loyalty?phone=${encodeURIComponent(ph)}`)
+        .then((r) => setLoy(r.enabled ? { points: r.points, redeem_value: r.redeem_value, max_percent: r.max_percent } : null))
+        .catch(() => setLoy(null));
+    }, 400);
+    return () => clearTimeout(id);
+  }, [phone, slug]);
 
   const send = async () => {
     if (!canSend) return;
@@ -55,7 +76,11 @@ export default function CartPage() {
         body.service = service;
         if (phone.trim()) body.customer_phone = phone.trim();
       }
+      if (branchId) body.branch_id = branchId;
+      if (phone.trim()) body.customer_phone = phone.trim();
       if (discountCode.trim()) body.discount_code = discountCode.trim();
+      const rp = Math.floor(Number(redeem));
+      if (loy && rp > 0) body.redeem_points = rp;
       const res = await api<{ id: string }>(`/api/public/shops/${slug}/orders`, { method: 'POST', body });
       if (table) localStorage.setItem(`qm-order:${slug}:${table}`, res.id);
       clear(slug);
@@ -146,6 +171,49 @@ export default function CartPage() {
               </div>
             )}
 
+            {/* الفرع المختار (F-04) */}
+            {branches.length > 0 && (
+              <div className="rounded-[22px] border border-black/[0.04] bg-white p-3.5 shadow-apple">
+                <label className="mb-2 block text-xs font-bold text-stone-500">{t('branch')}</label>
+                <div className="flex flex-wrap gap-2">
+                  {branches.map((b) => (
+                    <button
+                      key={b.id}
+                      onClick={() => setBranch(slug, b.id)}
+                      className={`rounded-2xl border px-3 py-1.5 text-xs font-extrabold transition active:scale-95 ${
+                        branchId === b.id ? 'border-teal-700 bg-teal-50 text-teal-800 shadow-sm' : 'border-stone-200 bg-white text-stone-600'
+                      }`}
+                    >
+                      🏢 {b.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* الولاء (F-17): رصيد واسترداد */}
+            {!table && loy && (
+              <div className="rounded-[22px] border border-black/[0.04] bg-white p-3.5 shadow-apple">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-stone-500">⭐ {t('myPoints')}</span>
+                  <span className="text-sm font-black text-teal-700" dir="ltr">
+                    {loy.points} · {t('pointsWorth')} ≈ {Math.round(loy.points * loy.redeem_value * 100) / 100}
+                  </span>
+                </div>
+                {loy.points > 0 && (
+                  <input
+                    value={redeem}
+                    onChange={(e) => setRedeem(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))}
+                    placeholder={t('redeemPoints')}
+                    inputMode="numeric"
+                    dir="ltr"
+                    className="mt-2 w-full rounded-2xl border border-stone-200 p-2.5 text-sm font-extrabold outline-none focus:border-teal-600"
+                  />
+                )}
+              </div>
+            )}
+
+            {/* حقل الهاتف للجلوس عند تفعيل الولاء (بدونه لا يُحسب الرصيد) */}
             {/* كود الخصم (F-06) — التحقق والحساب في الخادم */}
             <div className="rounded-[22px] border border-black/[0.04] bg-white p-3.5 shadow-apple">
               <label className="mb-1 block text-xs font-bold text-stone-500">{t('discountCode')}</label>

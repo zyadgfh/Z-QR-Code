@@ -60,11 +60,21 @@ async function deleteCategory(db, shopId, catId) {
 
 // ---------- الأصناف ----------
 
-function itemFields(body) {
-  const name = asStr(body.name, { max: 100, min: 1 });
-  if (!name) throw new HttpError(400, 'INVALID_NAME', 'اسم الصنف مطلوب');
-  const price = asMoney(body.price);
-  if (price === null) throw new HttpError(400, 'INVALID_PRICE', 'السعر غير صحيح');
+function itemFields(body, partial = false) {
+  let name;
+  if (partial && body.name === undefined) {
+    name = undefined;
+  } else {
+    name = asStr(body.name, { max: 100, min: 1 });
+    if (!name) throw new HttpError(400, 'INVALID_NAME', 'اسم الصنف مطلوب');
+  }
+  let price;
+  if (partial && body.price === undefined) {
+    price = undefined;
+  } else {
+    price = asMoney(body.price);
+    if (price === null) throw new HttpError(400, 'INVALID_PRICE', 'السعر غير صحيح');
+  }
   const description = body.description === undefined ? undefined : asStr(body.description, { max: 300 });
   const name_en = body.name_en === undefined ? undefined : asStr(body.name_en, { max: 100 });
   const description_en = body.description_en === undefined ? undefined : asStr(body.description_en, { max: 300 });
@@ -86,7 +96,7 @@ function itemFields(body) {
     weight_g = asInt(body.weight_g, { min: 0, max: 10000 });
     if (weight_g === null || weight_g === undefined) throw new HttpError(400, 'INVALID_WEIGHT', 'الوزن غير صحيح');
   }
-  return {
+  const out2 = {
     name,
     price,
     description: description === undefined ? undefined : description || null,
@@ -99,6 +109,8 @@ function itemFields(body) {
     calories: calories === undefined ? undefined : calories,
     weight_g: weight_g === undefined ? undefined : weight_g,
   };
+  if (partial) for (const k of Object.keys(out2)) if (out2[k] === undefined) delete out2[k];
+  return out2;
 }
 
 async function createItem(db, shopId, body) {
@@ -126,7 +138,7 @@ async function createItem(db, shopId, body) {
 
 async function updateItem(db, shopId, itemId, body) {
   const item = await mustOwn(db, 'items', itemId, shopId);
-  const fields = itemFields(body);
+  const fields = itemFields(body, true);
   if (body.category_id !== undefined && body.category_id !== item.category_id) {
     await mustOwn(db, 'categories', body.category_id, shopId);
     fields.category_id = body.category_id;
@@ -276,6 +288,7 @@ async function listFull(db, shopId) {
 /** قائمة العميل العامة — الأصناف المتاحة فقط */
 async function publicMenu(db, slug) {
   const shops = require('./shops');
+  const branches = require('./branches');
   const shop = await shops.findBySlug(db, slug);
   if (!shop) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
   if (shop.archived === true) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
@@ -298,14 +311,95 @@ async function publicMenu(db, slug) {
       theme: shop.theme || null,
       brand_color: shop.brand_color || null,
       hours: shop.hours || null,
+      // الولاء (F-17): الإعداد العام للعرض — الاحتساب خادمي حصريًا
+      loyalty: (await require('./loyalty').getConfig(db, shop)) || null,
     },
+    // الفروع النشطة (F-04) — يختار الزبون فرعه قبل الطلب
+    branches: await branches.listPublic(db, shop.id),
     categories: full.categories,
     // النافد اليوم يظهر معتيمًا (sold_out) والمخفي نهائيًا يختفي (available=false)
     items: full.items.filter((i) => i.available !== false).map((i) => ({ ...i })),
   };
 }
 
+/** استيراد منيو CSV (F-13): تحقق صف-بصف، صف خاطئ لا يفشل الملف، معاينة قبل الاعتماد */
+async function importMenu(db, shopId, csvText, { dry_run = false } = {}) {
+  const { parseCsv } = require('../lib/csv');
+  const rows = parseCsv(String(csvText || ''));
+  if (!rows.length) throw new HttpError(400, 'EMPTY_CSV', 'الملف فارغ');
+  const header = rows[0].map((h) => h.trim().toLowerCase());
+  const need = ['name', 'price', 'category'];
+  for (const n of need) {
+    if (!header.includes(n)) throw new HttpError(400, 'BAD_HEADER', `الرأس يجب أن يتضمن: ${need.join(', ')}`);
+  }
+  const col = (r, name) => {
+    const i = header.indexOf(name);
+    return i >= 0 ? (r[i] || '').trim() : '';
+  };
+  // خريطة التصنيفات الموجودة بالاسم
+  const cats = await db.query('categories', [{ field: 'shop_id', value: shopId }]);
+  const byName = new Map(cats.map((c) => [c.name.trim(), c.id]));
+  let createdCategories = 0;
+  let createdItems = 0;
+  const errors = [];
+  for (let ri = 1; ri < rows.length; ri++) {
+    const r = rows[ri];
+    if (!r.some((c) => c && c.trim())) continue; // صف فارغ يُتجاهل
+    try {
+      const catName = col(r, 'category');
+      if (!catName) throw new Error('التصنيف مطلوب');
+      let catId = byName.get(catName);
+      if (!catId) {
+        if (dry_run) {
+          errors.push({ row: ri + 1, error: `سيُنشأ تصنيف جديد: ${catName}` });
+          catId = null;
+        } else {
+          const cat = await createCategory(db, shopId, { name: catName });
+          catId = cat.id;
+          byName.set(catName, catId);
+          createdCategories += 1;
+        }
+      }
+      if (catId || dry_run) {
+        const nameVal = col(r, 'name');
+        const priceVal = col(r, 'price');
+        if (dry_run) {
+          // المعاينة الجافة تتحقق من الحقول الأساسية بلا كتابة
+          if (!asStr(nameVal, { max: 100, min: 1 })) throw new Error('اسم الصنف مطلوب');
+          if (asMoney(priceVal) === null) throw new Error('السعر غير صحيح');
+        }
+        const body = {
+          category_id: catId,
+          name: nameVal,
+          price: Number(priceVal),
+        };
+        const nen = col(r, 'name_en');
+        if (nen) body.name_en = nen;
+        const d = col(r, 'description');
+        if (d) body.description = d;
+        const den = col(r, 'description_en');
+        if (den) body.description_en = den;
+        const cal = col(r, 'calories');
+        if (cal) body.calories = Number(cal);
+        const wg = col(r, 'weight_g');
+        if (wg) body.weight_g = Number(wg);
+        const al = col(r, 'allergens');
+        if (al) body.allergens = al.split('|').map((x) => x.trim()).filter(Boolean);
+        if (col(r, 'sold_out').toLowerCase() === 'yes') body.sold_out = true;
+        if (!dry_run) {
+          await createItem(db, shopId, body); // 402 PLAN_LIMIT يتحول لخطأ الصف
+          createdItems += 1;
+        }
+      }
+    } catch (e) {
+      errors.push({ row: ri + 1, error: (e && e.message) || 'خطأ غير معروف' });
+    }
+  }
+  return { ok: true, dry_run: dry_run === true, created_categories: createdCategories, created_items: createdItems, errors };
+}
+
 module.exports = {
+  importMenu,
   mustOwn,
   createCategory,
   updateCategory,

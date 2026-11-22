@@ -5,6 +5,7 @@ import { useDashLang } from '../../stores/dashlang';
 import { compressImage } from '../../lib/img';
 import { Btn, Chip, Err, Field, Input, Label, Modal, Ok, Select, Spinner } from '../../components/ui';
 import { fadeInUp, popIn } from '../../lib/anim';
+import ImportCsv from './ImportCsv';
 
 type Opt = { id: string; name: string; name_en: string | null; price_delta: number };
 type Group = { id: string; name: string; name_en: string | null; selection: 'single' | 'multi'; required: boolean; options: Opt[] };
@@ -35,6 +36,8 @@ export default function DashMenu() {
   const [editing, setEditing] = useState<{ item: Item | null; open: boolean }>({ item: null, open: false });
   const [aiOpen, setAiOpen] = useState(false);
   const [trOpen, setTrOpen] = useState(false);
+  // استيراد CSV (F-13)
+  const [csvOpen, setCsvOpen] = useState(false);
   // حدود الخطة المجانية (BIZ-02) للعرض
   const [usage, setUsage] = useState<{ plan: string; items_used: number; item_limit: number; orders_this_month: number; order_limit: number } | null>(null);
 
@@ -101,6 +104,7 @@ export default function DashMenu() {
     <div className="space-y-3">
       <div className="flex flex-wrap items-center gap-2">
         <Btn onClick={() => setEditing({ item: null, open: true })} disabled={!selCat}>＋ {t('addItem')}</Btn>
+        <Btn variant="soft" onClick={() => setCsvOpen(true)}>📥 {t('menuImport')}</Btn>
         <Btn variant="soft" onClick={() => setAiOpen(true)}>✨ {t('aiImport')}</Btn>
         <Btn variant="soft" onClick={() => setTrOpen(true)}>🌐 {t('translate')}</Btn>
         <Btn variant="ghost" onClick={addCategory}>＋ {t('addCategory')}</Btn>
@@ -202,6 +206,7 @@ export default function DashMenu() {
       )}
       {aiOpen && <AiImportModal onClose={() => setAiOpen(false)} onPublished={load} />}
       {trOpen && <TranslateModal onClose={() => setTrOpen(false)} onApplied={load} />}
+      {csvOpen && <ImportCsv onClose={() => setCsvOpen(false)} onDone={load} />}
     </div>
   );
 }
