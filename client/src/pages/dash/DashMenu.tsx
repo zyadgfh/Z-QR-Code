@@ -240,6 +240,23 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
 
   const itemId = item?.id || savedId;
 
+  // توليد صورة الصنف بالذكاء الاصطناعي من الاسم (D7)
+  const [genBusy, setGenBusy] = useState(false);
+  const generateImage = async () => {
+    setGenBusy(true);
+    setError(null);
+    try {
+      const id = itemId || (await saveItem());
+      if (!id) return;
+      const r = await api<{ photo_url: string }>(`/api/shop/items/${id}/generate-image`, { method: 'POST' });
+      setPhotoUrl(r.photo_url);
+      await onSaved();
+    } catch (e: any) {
+      setError(e.message);
+    }
+    setGenBusy(false);
+  };
+
   const upload = async (file: File) => {
     setUploading(true);
     setError(null);
@@ -391,6 +408,14 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
             {uploading ? t('uploading') : `🖼 ${t('uploadPhoto')}`}
             <input type="file" accept="image/*" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
           </label>
+          <button
+            type="button"
+            onClick={generateImage}
+            disabled={genBusy || !name.trim()}
+            className="rounded-xl border border-teal-600 bg-teal-50 px-3 py-2 text-sm font-extrabold text-teal-800 transition hover:bg-teal-100 active:scale-95 disabled:opacity-60"
+          >
+            {genBusy ? `⏳ ${t('aiPhotoBusy')}` : `✨ ${t('aiPhoto')}`}
+          </button>
         </div>
 
         {error && <Err error={error} />}
