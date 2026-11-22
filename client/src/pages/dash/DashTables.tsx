@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import QRCode from 'qrcode';
 import { api } from '../../lib/api';
 import { dashT } from '../../lib/i18n';
 import { useDashLang } from '../../stores/dashlang';
 import { useAuth } from '../../stores/auth';
 import { Btn, Field, Input, Ok, Select, Spinner } from '../../components/ui';
+import { staggerCards } from '../../lib/anim';
 
 type Style = 'classic' | 'bold' | 'minimal';
 
@@ -131,6 +132,11 @@ export default function DashTables() {
   const [busy, setBusy] = useState(false);
   const [qrUrls, setQrUrls] = useState<Record<number, string>>({});
   const [style, setStyle] = useState<Style>(() => (localStorage.getItem('qm-qr-style') as Style) || 'classic');
+  const gridRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    staggerCards(gridRef.current);
+  }, [count]);
   const [dl, setDl] = useState<number | null>(null);
 
   useEffect(() => {
@@ -210,10 +216,11 @@ export default function DashTables() {
         <p className="mt-2 text-xs text-stone-400">{t('scanHint')}</p>
       </div>
 
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
+      <div ref={gridRef} className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4">
         {Array.from({ length: count }, (_, i) => i + 1).map((n) => (
           <div
             key={n}
+            data-card
             className="print-card rounded-3xl border bg-white p-4 text-center shadow-sm"
             style={{ borderColor: style === 'bold' ? brand : '#e7e5e4', borderTopWidth: style === 'bold' ? 8 : 1 }}
           >

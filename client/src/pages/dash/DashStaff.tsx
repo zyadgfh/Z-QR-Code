@@ -1,8 +1,9 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { dashT, fmtDate } from '../../lib/i18n';
 import { useDashLang } from '../../stores/dashlang';
 import { Btn, Err, Field, Input, Spinner } from '../../components/ui';
+import { staggerCards } from '../../lib/anim';
 
 type Staff = { id: string; email: string; created_at: number };
 
@@ -12,6 +13,11 @@ export default function DashStaff() {
   const [staff, setStaff] = useState<Staff[] | null>(null);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const listRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (staff?.length) staggerCards(listRef.current);
+  }, [staff]);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -64,14 +70,14 @@ export default function DashStaff() {
         {error && <Err error={error} />}
       </div>
 
-      <div className="rounded-3xl bg-white p-3 shadow-sm">
+      <div ref={listRef} className="rounded-3xl bg-white p-3 shadow-sm">
         {!staff ? (
           <Spinner label={t('loading')} />
         ) : staff.length === 0 ? (
           <p className="p-4 text-center text-sm font-bold text-stone-400">{t('staffEmpty')}</p>
         ) : (
           staff.map((s) => (
-            <div key={s.id} className="flex items-center gap-3 border-b border-stone-100 px-3 py-2.5 last:border-0">
+            <div key={s.id} data-card className="flex items-center gap-3 border-b border-stone-100 px-3 py-2.5 last:border-0">
               <span className="flex h-8 w-8 items-center justify-center rounded-full bg-stone-100 text-xs font-black text-stone-500">👤</span>
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-bold text-stone-700" dir="ltr">{s.email}</p>

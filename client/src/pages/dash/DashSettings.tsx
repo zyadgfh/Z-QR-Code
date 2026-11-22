@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { dashT, fmtDate } from '../../lib/i18n';
 import { useDashLang } from '../../stores/dashlang';
@@ -7,6 +7,7 @@ import { compressImage } from '../../lib/img';
 import { Btn, Err, Field, Input, Ok, Select, Spinner, StatusChip } from '../../components/ui';
 import ChangePasswordCard from '../../components/ChangePassword';
 import DiscountsCard from '../../components/DiscountsCard';
+import { staggerCards } from '../../lib/anim';
 
 type Summary = {
   shop: Shop;
@@ -20,6 +21,7 @@ export default function DashSettings() {
   const me = useAuth((s) => s.me);
   const loadMe = useAuth((s) => s.loadMe);
   const [summary, setSummary] = useState<Summary | null>(null);
+  const wrapRef = useRef<HTMLDivElement | null>(null);
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
   const [menuLang, setMenuLang] = useState<'ar' | 'en'>('ar');
@@ -94,9 +96,13 @@ export default function DashSettings() {
     setBusy(false);
   };
 
+  useEffect(() => {
+    staggerCards(wrapRef.current);
+  }, []);
+
   return (
-    <div className="space-y-4">
-      <div className="rounded-3xl bg-white p-5 shadow-sm">
+    <div ref={wrapRef} className="space-y-4">
+      <div data-card className="rounded-3xl bg-white p-5 shadow-sm">
         <h3 className="mb-3 text-sm font-black text-stone-400">⚙️ {t('settings')}</h3>
         <div className="grid gap-3 sm:grid-cols-2">
           <Field label={t('shopName')}><Input value={name} onChange={(e) => setName(e.target.value)} /></Field>
@@ -206,7 +212,7 @@ export default function DashSettings() {
         </div>
       </div>
 
-      <div className="rounded-3xl bg-white p-5 shadow-sm">
+      <div data-card className="rounded-3xl bg-white p-5 shadow-sm">
         <div className="mb-3 flex items-center justify-between">
           <h3 className="text-sm font-black text-stone-400">💳 {t('subscription')}</h3>
           <StatusChip status={shop.status} t={t} />

@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../stores/auth';
 import { useDashLang, useDocDir } from '../../stores/dashlang';
 import { dashT } from '../../lib/i18n';
 import { Btn, Err, Field, Input, Ok } from '../../components/ui';
+import { fadeInUp } from '../../lib/anim';
 
 type LoginRes = {
   token?: string;
@@ -25,6 +26,8 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
   const navigate = useNavigate();
 
   const [view, setView] = useState<'login' | 'forgot' | 'reset' | 'mfa'>('login');
+  const cardRef = useRef<HTMLFormElement | null>(null);
+  useEffect(() => fadeInUp(cardRef.current), []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');
@@ -133,7 +136,7 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
 
   const frame = (children: React.ReactNode, title: string) => (
     <div dir={dir} className="flex min-h-dvh items-center justify-center bg-[#f5f5f7] p-4">
-      <form onSubmit={view === 'mfa' ? submitChallenge : view === 'forgot' ? submitForgot : view === 'reset' ? submitReset : submitLogin} className="w-full max-w-sm rounded-3xl bg-white p-7 shadow-apple">
+      <form ref={cardRef} onSubmit={view === 'mfa' ? submitChallenge : view === 'forgot' ? submitForgot : view === 'reset' ? submitReset : submitLogin} className="w-full max-w-sm rounded-3xl bg-white p-7 shadow-apple">
         <div className="mb-6 text-center">
           <div className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-gradient-to-br from-teal-600 to-teal-800 text-2xl text-white shadow-apple">▦</div>
           <h1 className="text-xl font-extrabold text-stone-800">{title}</h1>
