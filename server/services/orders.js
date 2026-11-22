@@ -157,6 +157,16 @@ async function createPublicOrder(db, slug, payload = {}) {
     if (grandTotal <= 0) throw new HttpError(400, 'INVALID_TOTAL', 'إجمالي الطلب غير صحيح');
   }
 
+  // الضريبة (D8): على القيمة الخاضعة = المجموع − خصم الكود − خصم النقاط (لا على التوصيل ولا الإكرامية)
+  let taxTotal = 0;
+  const taxPctRaw = Number(shop.tax_percent);
+  const taxPct = Number.isFinite(taxPctRaw) && taxPctRaw > 0 ? Math.min(30, Math.round(taxPctRaw * 100) / 100) : 0;
+  if (taxPct > 0) {
+    const taxable = Math.max(0, roundMoney(total - (discount ? discount.amount : 0) - (loyaltyUse ? loyaltyUse.discount : 0)));
+    taxTotal = Math.round(taxable * taxPct) / 100;
+    grandTotal = roundMoney(grandTotal + taxTotal);
+  }
+
   // الإكرامية (D6): تُضاف آخرًا فوق كل شيء — لا تخضع للخصومات ولا سقف الاسترداد
   let tip = 0;
   if (payload.tip !== undefined && payload.tip !== null && payload.tip !== '') {
@@ -195,6 +205,8 @@ async function createPublicOrder(db, slug, payload = {}) {
     loyalty_points_used: loyaltyUse ? loyaltyUse.points_used : 0,
     loyalty_discount: loyaltyUse ? loyaltyUse.discount : 0,
     delivery_fee: deliveryFee,
+    tax_percent: taxPct,
+    tax_total: taxTotal,
     tip,
     total: grandTotal,
     status: 'pending',
@@ -212,7 +224,7 @@ async function createPublicOrder(db, slug, payload = {}) {
     const rows = await db.query('discounts', [{ field: 'id', value: discount.id }]);
     if (rows[0]) await db.update('discounts', discount.id, { used_count: (rows[0].used_count || 0) + 1 });
   }
-  return { id, total: grandTotal, subtotal: total, discount_amount: order.discount_amount, loyalty_discount: order.loyalty_discount, points_earned: pointsEarned, delivery_fee: deliveryFee, tip, table_number: order.table_number, branch_name: branchName, service, created_at: now };
+  return { id, total: grandTotal, subtotal: total, discount_amount: order.discount_amount, loyalty_discount: order.loyalty_discount, tax_total: taxTotal, points_earned: pointsEarned, delivery_fee: deliveryFee, tip, table_number: order.table_number, branch_name: branchName, service, created_at: now };
 }
 
 /** حالة الطلب للعميل — بدون كشف مراحل العمل الداخلية */
@@ -235,6 +247,8 @@ async function publicStatus(db, orderId) {
     loyalty_points_used: order.loyalty_points_used || 0,
     loyalty_discount: order.loyalty_discount || 0,
     delivery_fee: order.delivery_fee || 0,
+    tax_percent: order.tax_percent || 0,
+    tax_total: order.tax_total || 0,
     tip: order.tip || 0,
     rating: order.rating ? { stars: order.rating.stars, comment: order.rating.comment || '' } : null,
     total: order.total,

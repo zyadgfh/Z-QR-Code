@@ -159,6 +159,13 @@ async function updateSettings(db, shopId, patch) {
       throw new HttpError(400, 'INVALID_THEME', 'ثيم غير معروف');
     else out.theme = patch.theme;
   }
+  // الضريبة (D8): نسبة 0..30% تُطبق خادميًا على القيمة الخاضعة للضريبة
+  if (patch.tax_percent !== undefined) {
+    const v = Number(patch.tax_percent);
+    if (!Number.isFinite(v) || v < 0 || v > 30)
+      throw new HttpError(400, 'INVALID_TAX', 'نسبة الضريبة بين 0 و30');
+    out.tax_percent = Math.round(v * 100) / 100;
+  }
   // لون الهوية للـ QR والثيمات
   if (patch.brand_color !== undefined) {
     if (patch.brand_color === null || patch.brand_color === '') out.brand_color = null;

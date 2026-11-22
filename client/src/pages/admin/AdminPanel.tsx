@@ -3,7 +3,7 @@ import { api } from '../../lib/api';
 import { dashT, fmtDate } from '../../lib/i18n';
 import { useAuth, Me } from '../../stores/auth';
 import { useDashLang, useDocDir } from '../../stores/dashlang';
-import { Btn, Card, CardHead, Err, Field, Input, Modal, Ok, Select, Spinner, StatusChip, Textarea } from '../../components/ui';
+import { Btn, Card, CardHead, DataTable, type Col, Err, Field, Input, Modal, Ok, Select, Spinner, StatusChip, Textarea } from '../../components/ui';
 import ChangePasswordCard from '../../components/ChangePassword';
 import SecurityCard from '../../components/SecurityCard';
 import MfaGate from '../../components/MfaGate';
@@ -173,6 +173,71 @@ export default function AdminPanel() {
     }
   };
 
+  // أعمدة جدول المحلات (D8) — كل الأزرار الحالية كما هي
+  const shopCols: Col<AdminShop>[] = [
+    {
+      key: 'name',
+      label: t('shopName'),
+      sortVal: (r) => r.name,
+      render: (r) => (
+        <>
+          <p className="font-extrabold text-stone-800">
+            {r.name}
+            {r.archived && <span className="ms-1 rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-black text-stone-500">🗂 {t('archivedShop')}</span>}
+          </p>
+          <p className="text-[11px] text-stone-400" dir="ltr">/{r.slug}</p>
+        </>
+      ),
+    },
+    { key: 'owner', label: t('owner'), sortVal: (r) => r.owner_email || '', render: (r) => <span className="text-xs text-stone-500" dir="ltr">{r.owner_email}</span> },
+    { key: 'tables', label: t('tableCount'), sortVal: (r) => r.table_count, defaultHidden: true, render: (r) => r.table_count },
+    { key: 'trial', label: t('trialEndsAt'), sortVal: (r) => r.trial_ends_at, defaultHidden: true, render: (r) => <span className="text-xs">{fmtDate(lang, r.trial_ends_at)}</span> },
+    { key: 'paid', label: t('paidUntilAt'), sortVal: (r) => r.paid_until ?? 0, render: (r) => <span className="text-xs">{fmtDate(lang, r.paid_until)}</span> },
+    {
+      key: 'status',
+      label: t('status'),
+      sortVal: (r) => (r.status || '') + (r.archived ? 'z' : ''),
+      render: (r) => (r.archived ? <span className="text-xs font-black text-stone-400">🗂</span> : <StatusChip status={r.status} t={t} />),
+    },
+    {
+      key: 'actions',
+      label: t('actions'),
+      render: (r) => (
+        <div className="flex flex-wrap gap-1.5">
+          {!r.archived && (
+            <>
+              <select
+                value={r.plan || 'free'}
+                onChange={(e) => act(() => api(`/api/admin/shops/${r.id}/plan`, { method: 'POST', body: { plan: e.target.value } }))}
+                className="rounded-xl border border-stone-300 px-2 py-1.5 text-xs font-extrabold text-stone-600"
+              >
+                <option value="free">{t('planFree')}</option>
+                <option value="pro">{t('planPro')} ⭐</option>
+              </select>
+              <Btn variant="soft" onClick={() => act(() => api(`/api/admin/shops/${r.id}/mark-paid`, { method: 'POST', body: { months: 1 } }))}>💳 {t('markPaid')}</Btn>
+              {r.status === 'locked' ? (
+                <Btn onClick={() => act(() => api(`/api/admin/shops/${r.id}/lock`, { method: 'POST', body: { locked: false } }))}>🔓 {t('unlock')}</Btn>
+              ) : (
+                <Btn variant="danger" onClick={() => act(() => api(`/api/admin/shops/${r.id}/lock`, { method: 'POST', body: { locked: true } }))}>🔒 {t('lock')}</Btn>
+              )}
+              <Btn variant="ghost" onClick={() => setResetPw(r)}>🔑</Btn>
+              <Btn variant="ghost" onClick={() => exportCsv(r)}>⬇ CSV</Btn>
+              <Btn
+                variant="ghost"
+                onClick={() => {
+                  if (window.confirm(t('archiveWarn'))) act(() => api(`/api/admin/shops/${r.id}/archive`, { method: 'POST', body: { archived: true } }));
+                }}
+              >
+                🗂 {t('archive')}
+              </Btn>
+            </>
+          )}
+          {r.archived && <Btn onClick={() => act(() => api(`/api/admin/shops/${r.id}/archive`, { method: 'POST', body: { archived: false } }))}>♻️ {t('restore')}</Btn>}
+        </div>
+      ),
+    },
+  ];
+
   const tabs: Array<{ id: typeof tab; label: string; icon: string }> = [
     { id: 'overview', label: t('tabOverview'), icon: '📊' },
     { id: 'shops', label: t('tabShops'), icon: '🏪' },
@@ -246,74 +311,12 @@ export default function AdminPanel() {
               ) : shops.length === 0 ? (
                 <p className="py-6 text-center text-sm font-bold text-stone-400">{q ? t('searchShops') : t('noShops')}</p>
               ) : (
-                <div ref={tableRef} className="overflow-x-auto">
-                  <table className="w-full text-sm">
-                    <thead>
-                      <tr className="text-start text-xs text-stone-400">
-                        <th className="p-2 text-start">{t('shopName')}</th>
-                        <th className="p-2 text-start">{t('owner')}</th>
-                        <th className="p-2 text-start">{t('tableCount')}</th>
-                        <th className="p-2 text-start">{t('trialEndsAt')}</th>
-                        <th className="p-2 text-start">{t('paidUntilAt')}</th>
-                        <th className="p-2 text-start">{t('status')}</th>
-                        <th className="p-2 text-start">{t('actions')}</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {shops.map((s) => (
-                        <tr key={s.id} data-card className="border-t border-stone-100">
-                          <td className="p-2">
-                            <p className="font-extrabold text-stone-800">
-                              {s.name}
-                              {s.archived && <span className="ms-1 rounded-full bg-stone-200 px-2 py-0.5 text-[10px] font-black text-stone-500">🗂 {t('archivedShop')}</span>}
-                            </p>
-                            <p className="text-[11px] text-stone-400" dir="ltr">/{s.slug}</p>
-                          </td>
-                          <td className="p-2 text-xs text-stone-500" dir="ltr">{s.owner_email}</td>
-                          <td className="p-2">{s.table_count}</td>
-                          <td className="p-2 text-xs">{fmtDate(lang, s.trial_ends_at)}</td>
-                          <td className="p-2 text-xs">{fmtDate(lang, s.paid_until)}</td>
-                          <td className="p-2">{s.archived ? <span className="text-xs font-black text-stone-400">🗂</span> : <StatusChip status={s.status} t={t} />}</td>
-                          <td className="p-2">
-                            <div className="flex flex-wrap gap-1.5">
-                              {!s.archived && (
-                                <>
-                                  <select
-                                    value={s.plan || 'free'}
-                                    onChange={(e) => act(() => api(`/api/admin/shops/${s.id}/plan`, { method: 'POST', body: { plan: e.target.value } }))}
-                                    className="rounded-xl border border-stone-300 px-2 py-1.5 text-xs font-extrabold text-stone-600"
-                                  >
-                                    <option value="free">{t('planFree')}</option>
-                                    <option value="pro">{t('planPro')} ⭐</option>
-                                  </select>
-                                  <Btn variant="soft" onClick={() => act(() => api(`/api/admin/shops/${s.id}/mark-paid`, { method: 'POST', body: { months: 1 } }))}>💳 {t('markPaid')}</Btn>
-                                  {s.status === 'locked' ? (
-                                    <Btn onClick={() => act(() => api(`/api/admin/shops/${s.id}/lock`, { method: 'POST', body: { locked: false } }))}>🔓 {t('unlock')}</Btn>
-                                  ) : (
-                                    <Btn variant="danger" onClick={() => act(() => api(`/api/admin/shops/${s.id}/lock`, { method: 'POST', body: { locked: true } }))}>🔒 {t('lock')}</Btn>
-                                  )}
-                                  <Btn variant="ghost" onClick={() => setResetPw(s)}>🔑</Btn>
-                                  <Btn variant="ghost" onClick={() => exportCsv(s)}>⬇ CSV</Btn>
-                                  <Btn
-                                    variant="ghost"
-                                    onClick={() => {
-                                      if (window.confirm(t('archiveWarn'))) act(() => api(`/api/admin/shops/${s.id}/archive`, { method: 'POST', body: { archived: true } }));
-                                    }}
-                                  >
-                                    🗂 {t('archive')}
-                                  </Btn>
-                                </>
-                              )}
-                              {s.archived && (
-                                <Btn onClick={() => act(() => api(`/api/admin/shops/${s.id}/archive`, { method: 'POST', body: { archived: false } }))}>♻️ {t('restore')}</Btn>
-                              )}
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
+              <DataTable<AdminShop>
+                rows={shops}
+                pageSize={8}
+                emptyText={q ? t('searchShops') : t('noShops')}
+                cols={shopCols}
+              />
               )}
             </div>
           </div>

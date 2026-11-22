@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../lib/api';
 import { dashT, money } from '../../lib/i18n';
 import { useDashLang } from '../../stores/dashlang';
-import { Card, CardHead, Err, Spinner } from '../../components/ui';
+import { Card, CardHead, EmptyState, Err, Spinner } from '../../components/ui';
 import { staggerCards } from '../../lib/anim';
 
 type Analytics = {
@@ -12,6 +12,7 @@ type Analytics = {
   avg_basket: number;
   tips_total: number;
   discount_total: number;
+  tax_total: number;
   loyalty_discount_total: number;
   points_earned_total: number;
   status_counts: Record<string, number>;
@@ -86,7 +87,7 @@ export default function DashAnalytics() {
           <Card data-card>
             <CardHead icon="🏆" title={t('topItems')} />
             {data.top_items.length === 0 ? (
-              <p className="text-sm font-bold text-stone-400">{t('noData')}</p>
+              <EmptyState icon="🏆" title={t('noData')} />
             ) : (
               <ul className="space-y-2">
                 {data.top_items.map((it, i) => (
@@ -141,7 +142,7 @@ export default function DashAnalytics() {
           <Card data-card>
             <CardHead icon="⭐" title={t('ratingsDist')} />
             {data.ratings.count === 0 ? (
-              <p className="text-sm font-bold text-stone-400">{t('noRatings')}</p>
+              <EmptyState icon="⭐" title={t('noRatings')} />
             ) : (
               <ul className="space-y-1.5">
                 {[5, 4, 3, 2, 1].map((s, idx) => {
@@ -165,6 +166,7 @@ export default function DashAnalytics() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <MiniStat label={t('tipsTotal')} value={money(lang, data.tips_total)} />
               <MiniStat label={t('discountTotal')} value={money(lang, data.discount_total)} />
+              <MiniStat label={t('taxTotal')} value={money(lang, data.tax_total)} />
               <MiniStat label={t('loyaltyDiscountTotal')} value={money(lang, data.loyalty_discount_total)} />
               <MiniStat label={t('pointsTotal')} value={String(data.points_earned_total)} />
             </div>

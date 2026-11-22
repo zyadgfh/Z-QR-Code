@@ -16,6 +16,7 @@ const discountsService = require('../services/discounts');
 const branchesService = require('../services/branches');
 const loyaltyService = require('../services/loyalty');
 const analyticsService = require('../services/analytics');
+const auditService = require('../services/audit');
 const { ordersCsv } = require('../lib/csv');
 
 module.exports = function shopRoutes(ctx) {
@@ -207,7 +208,9 @@ module.exports = function shopRoutes(ctx) {
     '/items',
     h(async (req, res) => {
       requirePerm(req, 'prices', 'إنشاء أصناف بأسعار يحتاج صلاحية الأسعار');
-      res.status(201).json(await menuService.createItem(db, req.member.shop_id, req.body || {}));
+            const created = await menuService.createItem(db, req.member.shop_id, req.body || {});
+      auditService.log(db, req.member, 'item.create', (req.body && req.body.name) || '').catch(() => {});
+      res.status(201).json(created);
     })
   );
   r.put(
@@ -216,14 +219,17 @@ module.exports = function shopRoutes(ctx) {
       // تحديث بلا لمس السعر = صلاحية منيو؛ لمس السعر يحتاج صلاحية أسعار (قبول F-12)
       const body = req.body || {};
       requirePermDeep(req, 'menu', ['price'], body);
-      res.json(await menuService.updateItem(db, req.member.shop_id, req.params.id, body));
+      const upd = await menuService.updateItem(db, req.member.shop_id, req.params.id, body);
+      auditService.log(db, req.member, 'item.update', (body && body.name) || req.params.id).catch(() => {});
+      res.json(upd);
     })
   );
   r.delete(
     '/items/:id',
     h(async (req, res) => {
       requirePerm(req, 'menu');
-      await menuService.deleteItem(db, req.member.shop_id, req.params.id);
+            await menuService.deleteItem(db, req.member.shop_id, req.params.id);
+      auditService.log(db, req.member, 'item.delete', req.params.id).catch(() => {});
       res.json({ ok: true });
     })
   );
@@ -261,7 +267,9 @@ module.exports = function shopRoutes(ctx) {
     '/settings',
     h(async (req, res) => {
       requirePerm(req, 'settings');
-      res.json(await shopsService.updateSettings(db, req.member.shop_id, req.body || {}));
+      const saved = await shopsService.updateSettings(db, req.member.shop_id, req.body || {});
+      auditService.log(db, req.member, 'settings.update', Object.keys(req.body || {}).join(', ')).catch(() => {});
+      res.json(saved);
     })
   );
 
@@ -327,6 +335,12 @@ module.exports = function shopRoutes(ctx) {
   }));
 
   // ---------- نسخة احتياطية JSON (D6) — مالك فقط ----------
+  // ---------- سجل التدقيق (D8) — مالك فقط ----------
+  r.get('/audit', h(async (req, res) => {
+    ownerOnly(req);
+    res.json(await auditService.listForShop(db, req.member.shop_id, 100));
+  }));
+
   r.get('/export', h(async (req, res) => {
     ownerOnly(req);
     const data = await shopsService.exportShop(db, req.member.shop_id);
@@ -345,6 +359,7 @@ module.exports = function shopRoutes(ctx) {
   r.post('/discounts', h(async (req, res) => {
     ownerOnly(req);
     const d = await discountsService.create(db, req.member.shop_id, req.body || {});
+    auditService.log(db, req.member, 'discount.create', (req.body && req.body.code) || '').catch(() => {});
     res.status(201).json(d);
   }));
 
@@ -401,6 +416,7 @@ module.exports = function shopRoutes(ctx) {
       ownerOnly(req);
       const body = req.body || {};
       res.status(201).json(await shopsService.addStaff(db, req.member.shop_id, { email: body.email, password: body.password }));
+      auditService.log(db, req.member, 'staff.create', (req.body && req.body.email) || '').catch(() => {});
     })
   );
   r.delete(
@@ -408,6 +424,7 @@ module.exports = function shopRoutes(ctx) {
     h(async (req, res) => {
       ownerOnly(req);
       await shopsService.removeStaff(db, req.member.shop_id, req.params.userId);
+      auditService.log(db, req.member, 'staff.delete', req.params.userId).catch(() => {});
       res.json({ ok: true });
     })
   );
@@ -417,7 +434,9 @@ module.exports = function shopRoutes(ctx) {
     '/staff/:userId/perms',
     h(async (req, res) => {
       ownerOnly(req);
-      res.json(await shopsService.setStaffPerms(db, req.member.shop_id, req.params.userId, req.body || {}));
+            const out = await shopsService.setStaffPerms(db, req.member.shop_id, req.params.userId, req.body || {});
+      auditService.log(db, req.member, 'staff.perms', JSON.stringify(req.body || {})).catch(() => {});
+      res.json(out);
     })
   );
 
@@ -433,21 +452,27 @@ module.exports = function shopRoutes(ctx) {
     '/branches',
     h(async (req, res) => {
       requirePerm(req, 'settings');
-      res.status(201).json(await branchesService.create(db, req.member.shop_id, req.body || {}));
+            const br = await branchesService.create(db, req.member.shop_id, req.body || {});
+      auditService.log(db, req.member, 'branch.create', (req.body && req.body.name) || '').catch(() => {});
+      res.status(201).json(br);
     })
   );
   r.put(
     '/branches/:id',
     h(async (req, res) => {
       requirePerm(req, 'settings');
-      res.json(await branchesService.patchBranch(db, req.member.shop_id, req.params.id, req.body || {}));
+            const brp = await branchesService.patchBranch(db, req.member.shop_id, req.params.id, req.body || {});
+      auditService.log(db, req.member, 'branch.update', req.params.id).catch(() => {});
+      res.json(brp);
     })
   );
   r.delete(
     '/branches/:id',
     h(async (req, res) => {
       requirePerm(req, 'settings');
-      res.json(await branchesService.remove(db, req.member.shop_id, req.params.id));
+      const brd = await branchesService.remove(db, req.member.shop_id, req.params.id);
+      auditService.log(db, req.member, 'branch.delete', req.params.id).catch(() => {});
+      res.json(brd);
     })
   );
 

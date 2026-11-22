@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { popIn, shake, sheetIn } from '../lib/anim';
 import { useToasts } from '../lib/toast';
 
@@ -267,6 +267,160 @@ export function Toaster() {
           <span className="min-w-0 flex-1">{t.msg}</span>
         </div>
       ))}
+    </div>
+  );
+}
+
+
+// ================= DataTable — جدول متقدم (D8) =================
+// بحث/فرز/ترقيم/إظهار أعمدة — لغة آبل وRTL صحيح. البيانات تُمرر من الخادم كما هي.
+
+export type Col<T> = {
+  key: string;
+  label: string;
+  render: (row: T) => React.ReactNode;
+  sortVal?: (row: T) => string | number;
+  defaultHidden?: boolean;
+  className?: string;
+};
+
+export function DataTable<T extends { id: string }>({
+  rows,
+  cols,
+  pageSize = 10,
+  emptyText,
+  toolbar,
+}: {
+  rows: T[];
+  cols: Col<T>[];
+  pageSize?: number;
+  emptyText: string;
+  toolbar?: React.ReactNode;
+}) {
+  const [sortKey, setSortKey] = useState<string | null>(null);
+  const [dir, setDir] = useState<1 | -1>(1);
+  const [page, setPage] = useState(0);
+  const [hidden, setHidden] = useState<Set<string>>(() => new Set(cols.filter((c) => c.defaultHidden).map((c) => c.key)));
+  const [colsOpen, setColsOpen] = useState(false);
+
+  const visible = cols.filter((c) => !hidden.has(c.key));
+  const sorted = useMemo(() => {
+    const col = cols.find((c) => c.key === sortKey);
+    if (!col || !col.sortVal) return rows;
+    return [...rows].sort((a, b) => {
+      const va = col.sortVal!(a);
+      const vb = col.sortVal!(b);
+      if (va < vb) return -1 * dir;
+      if (va > vb) return 1 * dir;
+      return 0;
+    });
+  }, [rows, sortKey, dir]);
+
+  const pages = Math.max(1, Math.ceil(sorted.length / pageSize));
+  const cur = Math.min(page, pages - 1);
+  const slice = sorted.slice(cur * pageSize, cur * pageSize + pageSize);
+
+  const toggleSort = (key: string) => {
+    if (sortKey === key) setDir((d) => (d === 1 ? -1 : 1));
+    else {
+      setSortKey(key);
+      setDir(1);
+    }
+  };
+
+  return (
+    <div>
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        {toolbar}
+        <div className="relative ms-auto">
+          <button
+            onClick={() => setColsOpen((v) => !v)}
+            className="rounded-xl border border-stone-300 px-2.5 py-1.5 text-xs font-extrabold text-stone-500 transition hover:bg-stone-100"
+          >
+            ⚙ {cols.length - hidden.size}/{cols.length}
+          </button>
+          {colsOpen && (
+            <div className="absolute end-0 z-20 mt-1 w-44 rounded-2xl bg-white p-2 shadow-apple" dir="rtl">
+              {cols.map((c) => (
+                <label key={c.key} className="flex cursor-pointer items-center gap-2 rounded-xl px-2 py-1.5 text-xs font-bold text-stone-600 hover:bg-stone-100">
+                  <input
+                    type="checkbox"
+                    className="h-3.5 w-3.5 accent-teal-700"
+                    checked={!hidden.has(c.key)}
+                    onChange={() =>
+                      setHidden((h) => {
+                        const n = new Set(h);
+                        if (n.has(c.key)) n.delete(c.key);
+                        else if (visible.length > 1) n.add(c.key);
+                        return n;
+                      })
+                    }
+                  />
+                  {c.label}
+                </label>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {slice.length === 0 ? (
+        <EmptyState icon="📭" title={emptyText} />
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[560px] text-sm">
+            <thead>
+              <tr className="text-xs text-stone-400">
+                {visible.map((c) => (
+                  <th key={c.key} className={`p-2 text-start ${c.className || ''}`}>
+                    {c.sortVal ? (
+                      <button onClick={() => toggleSort(c.key)} className="inline-flex items-center gap-1 font-extrabold transition hover:text-stone-600">
+                        {c.label}
+                        <span className="text-[10px]">{sortKey === c.key ? (dir === 1 ? '▲' : '▼') : '⇅'}</span>
+                      </button>
+                    ) : (
+                      c.label
+                    )}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {slice.map((row) => (
+                <tr key={row.id} data-card className="border-t border-stone-100 transition hover:bg-stone-50">
+                  {visible.map((c) => (
+                    <td key={c.key} className={`p-2 align-middle ${c.className || ''}`}>
+                      {c.render(row)}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {sorted.length > pageSize && (
+        <div className="mt-3 flex items-center justify-center gap-3 text-xs font-extrabold text-stone-500">
+          <button
+            onClick={() => setPage(Math.max(0, cur - 1))}
+            disabled={cur === 0}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 transition hover:bg-stone-100 disabled:opacity-40"
+          >
+            ‹
+          </button>
+          <span dir="ltr">
+            {cur + 1} / {pages} · {sorted.length}
+          </span>
+          <button
+            onClick={() => setPage(Math.min(pages - 1, cur + 1))}
+            disabled={cur >= pages - 1}
+            className="rounded-xl border border-stone-300 px-3 py-1.5 transition hover:bg-stone-100 disabled:opacity-40"
+          >
+            ›
+          </button>
+        </div>
+      )}
     </div>
   );
 }
