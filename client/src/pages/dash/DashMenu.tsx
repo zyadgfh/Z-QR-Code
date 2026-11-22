@@ -24,6 +24,8 @@ type Item = {
   allergens?: string[] | null;
   calories?: number | null;
   weight_g?: number | null;
+  stock_qty?: number | null;
+  low_stock_threshold?: number | null;
   groups: Group[];
 };
 type MenuData = { categories: { id: string; name: string; name_en: string | null; sort_order: number }[]; items: Item[] };
@@ -174,6 +176,11 @@ export default function DashMenu() {
                   {it.name}
                   {!it.available && <Chip color="red">{t('hidden')}</Chip>}
                   {it.available && it.sold_out && <Chip color="amber">{t('soldOut')}</Chip>}
+                  {it.stock_qty !== null && it.stock_qty !== undefined && (
+                    <Chip color={it.stock_qty <= 0 ? 'red' : it.stock_qty <= (it.low_stock_threshold ?? 5) ? 'amber' : 'stone'}>
+                      📦 {t('stockOnHand')} {it.stock_qty}
+                    </Chip>
+                  )}
                 </p>
                 {it.name_en && <p className="truncate text-xs text-stone-400" dir="ltr">{it.name_en}</p>}
                 <p className="text-sm font-extrabold text-teal-700">{it.price} {lang === 'ar' ? 'ج.م' : 'EGP'}</p>
@@ -229,6 +236,9 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
   const [allergensText, setAllergensText] = useState((item?.allergens || []).join('، '));
   const [calories, setCalories] = useState(item?.calories ?? '');
   const [weightG, setWeightG] = useState(item?.weight_g ?? '');
+  // المخزون (الطور 5): فارغ = بلا تتبع
+  const [stockQty, setStockQty] = useState(item?.stock_qty ?? '');
+  const [lowThresh, setLowThresh] = useState(item?.low_stock_threshold ?? '');
   const [photoUrl, setPhotoUrl] = useState(item?.photo_url || '');
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -291,6 +301,8 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
       allergens,
       calories: calories === '' ? null : Number(calories),
       weight_g: weightG === '' ? null : Number(weightG),
+      stock_qty: stockQty === '' ? null : Number(stockQty),
+      low_stock_threshold: lowThresh === '' ? null : Number(lowThresh),
       photo_url: photoUrl || null,
     };
     try {
@@ -401,6 +413,12 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
           </Field>
           <Field label={t('weightG')}>
             <Input type="number" min={0} value={weightG} onChange={(e) => setWeightG(e.target.value)} />
+          </Field>
+          <Field label={t('stockLabel')}>
+            <Input type="number" min={0} value={stockQty} onChange={(e) => setStockQty(e.target.value)} placeholder="∞" />
+          </Field>
+          <Field label={t('stockThresh')}>
+            <Input type="number" min={0} value={lowThresh} onChange={(e) => setLowThresh(e.target.value)} placeholder="5" />
           </Field>
         </div>
         <p className="text-xs text-stone-400">{t('allergensHint')}</p>

@@ -159,6 +159,15 @@ async function updateSettings(db, shopId, patch) {
       throw new HttpError(400, 'INVALID_THEME', 'ثيم غير معروف');
     else out.theme = patch.theme;
   }
+  // ملاحظة الإيصال (الطور 5): نص ختامي يظهر بطباعة الإيصال
+  if (patch.receipt_note !== undefined) {
+    if (patch.receipt_note === null || patch.receipt_note === '') out.receipt_note = '';
+    else {
+      const v = asStr(patch.receipt_note, { max: 300 });
+      if (v === null || !v) throw new HttpError(400, 'INVALID_NOTE', 'ملاحظة الإيصال حتى 300 حرف');
+      out.receipt_note = v;
+    }
+  }
   // الضريبة (D8): نسبة 0..30% تُطبق خادميًا على القيمة الخاضعة للضريبة
   if (patch.tax_percent !== undefined) {
     const v = Number(patch.tax_percent);

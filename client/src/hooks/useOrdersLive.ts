@@ -26,6 +26,9 @@ export type Order = {
   discount_code?: string | null;
   discount_amount?: number;
   delivery_fee?: number;
+  tax_percent?: number;
+  tax_total?: number;
+  tip?: number;
   status: 'pending' | 'preparing' | 'ready' | 'done';
   eta_minutes: number | null;
   created_at: number;
