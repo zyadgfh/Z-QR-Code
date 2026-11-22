@@ -24,10 +24,12 @@ type Item = {
   weight_g?: number | null;
   groups: Group[];
 };
+type Branch = { id: string; name: string; address: string | null };
 type MenuData = {
   open: boolean;
   reason?: string;
   shop?: { slug: string; name: string; logo_url: string | null; menu_language?: Lang; table_count?: number; theme?: string | null; brand_color?: string | null };
+  branches?: Branch[];
   categories?: { id: string; name: string; name_en: string | null }[];
   items?: Item[];
 };
@@ -72,7 +74,17 @@ export default function CustomerMenu() {
   useEffect(() => {
     let alive = true;
     api<MenuData>(`/api/public/shops/${slug}/menu`)
-      .then((d) => alive && setData(d))
+      .then((d) => {
+        if (!alive) return;
+        setData(d);
+        // الفروع (F-04): حفظ القائمة + فرع افتراضي = الأول — الزبون يبدّل من الشرائح
+        if (d.branches?.length) {
+          useCart.getState().setBranches(slug, d.branches);
+          if (!useCart.getState().branchBySlug[slug]) {
+            useCart.getState().setBranch(slug, d.branches[0].id);
+          }
+        }
+      })
       .catch((e) => e.status === 404 && setNotFound(true));
     return () => {
       alive = false;
@@ -182,6 +194,13 @@ export default function CustomerMenu() {
           />
         </div>
       </header>
+      {data.branches && data.branches.length > 0 && (
+        <div className="flex gap-2 overflow-x-auto px-4 py-2.5" dir={dir}>
+          {data.branches.map((b) => (
+            <BranchChip key={b.id} slug={slug} id={b.id} name={b.name} address={b.address} />
+          ))}
+        </div>
+      )}
 
       {/* طلب نشط */}
       {activeOrder && (
@@ -464,5 +483,20 @@ function ItemSheet({
         {!table && <p className="mt-2 text-center text-xs font-bold text-amber-600">{t('needTable')}</p>}
       </div>
     </div>
+  );
+}
+
+
+function BranchChip({ slug, id, name, address }: { slug: string; id: string; name: string; address: string | null }) {
+  const setBranch = useCart((s) => s.setBranch);
+  const active = useCart((s) => s.branchBySlug[slug] === id);
+  return (
+    <button
+      onClick={() => setBranch(slug, id)}
+      className={`shrink-0 rounded-2xl border px-3 py-1.5 text-start transition active:scale-95 ${active ? 'border-teal-600 bg-teal-50 shadow-sm' : 'border-stone-200 bg-white'}`}
+    >
+      <p className={`text-xs font-black ${active ? 'text-teal-800' : 'text-stone-600'}`}>🏢 {name}</p>
+      {address && <p className="text-[10px] font-bold text-stone-400">{address}</p>}
+    </button>
   );
 }

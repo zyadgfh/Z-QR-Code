@@ -166,6 +166,12 @@ async function updateSettings(db, shopId, patch) {
       throw new HttpError(400, 'INVALID_COLOR', 'لون الهوية يجب أن يكون بصيغة #RRGGBB');
     else out.brand_color = patch.brand_color.toLowerCase();
   }
+  // برنامج الولاء (F-17): إعداد المحل — التحقق والاحتساب خادمي حصريًا
+  if (patch.loyalty !== undefined) {
+    const loyalty = require('./loyalty');
+    const cur = await loyalty.getConfig(db, shop);
+    out.loyalty = loyalty.normalizeConfig({ ...cur, ...patch.loyalty });
+  }
   return db.update('shops', shopId, out);
 }
 
@@ -222,6 +228,8 @@ async function addStaff(db, shopId, { email, password }) {
     shop_id: shopId,
     user_id: userId,
     role: 'staff',
+    // مصفوفة الصلاحيات الافتراضية (F-12): الطلبات فقط — الفرض خادمي لا واجهي
+    perms: { orders: true, menu: false, settings: false, prices: false },
     created_at: now,
   });
   return { id: userId, email: sEmail };
@@ -234,9 +242,33 @@ async function listStaff(db, shopId) {
   ]);
   const users = await Promise.all(mems.map((m) => db.get('users', m.user_id)));
   return mems
-    .map((m, i) => users[i] && { id: m.user_id, email: users[i].email, created_at: m.created_at })
+    .map((m, i) =>
+      users[i] && {
+        id: m.user_id,
+        email: users[i].email,
+        created_at: m.created_at,
+        perms: m.perms || { orders: true, menu: false, settings: false, prices: false },
+      }
+    )
     .filter(Boolean)
     .sort((a, b) => a.created_at - b.created_at);
+}
+
+/** تحديث مصفوفة صلاحيات موظف (F-12) — مفاتيح محصورة، الفرض في مسارات الخادم */
+const STAFF_PERMS = ['orders', 'menu', 'settings', 'prices'];
+async function setStaffPerms(db, shopId, userId, patch) {
+  const mems = await db.query('memberships', [
+    { field: 'shop_id', value: shopId },
+    { field: 'user_id', value: userId },
+    { field: 'role', value: 'staff' },
+  ]);
+  if (!mems.length) throw new HttpError(404, 'NOT_FOUND', 'الموظف غير موجود');
+  const cur = mems[0].perms || { orders: true, menu: false, settings: false, prices: false };
+  const out = { ...cur };
+  for (const k of STAFF_PERMS) {
+    if (patch && patch[k] !== undefined) out[k] = patch[k] === true;
+  }
+  return db.update('memberships', mems[0].id, { perms: out });
 }
 
 async function removeStaff(db, shopId, userId) {
@@ -265,6 +297,6 @@ module.exports = {
   createShop,
   updateSettings,
   addStaff,
-  listStaff,
+  listStaff, setStaffPerms,
   removeStaff,
 };

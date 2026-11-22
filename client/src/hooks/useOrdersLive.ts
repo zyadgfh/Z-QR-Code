@@ -15,6 +15,10 @@ export type Order = {
   id: string;
   table_number: number | null;
   service?: 'dine_in' | 'takeaway' | 'delivery';
+  branch_name?: string | null;
+  loyalty_points_used?: number;
+  loyalty_discount?: number;
+  points_earned?: number;
   customer_phone?: string | null;
   note: string;
   total: number;

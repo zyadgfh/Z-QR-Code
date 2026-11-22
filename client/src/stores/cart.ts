@@ -8,6 +8,8 @@ export type CartOption = {
   price_delta: number;
 };
 
+export type CartBranch = { id: string; name: string; address: string | null };
+
 export type CartLine = {
   key: string;
   item_id: string;
@@ -20,6 +22,10 @@ export type CartLine = {
 
 type CartState = {
   bySlug: Record<string, CartLine[]>;
+  branchBySlug: Record<string, string>;
+  branchesBySlug: Record<string, CartBranch[]>;
+  setBranches: (slug: string, branches: CartBranch[]) => void;
+  setBranch: (slug: string, branchId: string) => void;
   add: (slug: string, line: CartLine) => void;
   setQty: (slug: string, key: string, qty: number) => void;
   remove: (slug: string, key: string) => void;
@@ -40,11 +46,33 @@ function save(state: CartState) {
   localStorage.setItem(KEY, JSON.stringify(state.bySlug));
 }
 
+function loadBranches(): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem('qm-branch') || '{}');
+  } catch {
+    return {};
+  }
+}
+
+function saveBranches(b: Record<string, string>) {
+  localStorage.setItem('qm-branch', JSON.stringify(b));
+}
+
 export const lineTotal = (l: CartLine) =>
   Math.round(l.qty * l.unit_price * 100) / 100;
 
 export const useCart = create<CartState>((set, get) => ({
   bySlug: load(),
+  branchBySlug: loadBranches(),
+  branchesBySlug: {},
+  setBranches: (slug, branches) => {
+    set({ branchesBySlug: { ...get().branchesBySlug, [slug]: branches } });
+  },
+  setBranch: (slug, branchId) => {
+    const next = { ...get().branchBySlug, [slug]: branchId };
+    set({ branchBySlug: next });
+    saveBranches(next);
+  },
   add: (slug, line) => {
     const cur = get().bySlug[slug] || [];
     const existing = cur.find(

@@ -47,6 +47,30 @@ module.exports = function publicRoutes(ctx) {
     })
   );
 
+  // تسجيل هاتف الزبون على طلب ترابيزة (F-17) — مقيّد بالمعدل
+  r.put(
+    '/orders/:id/phone',
+    rateLimit({ windowMs: 60000, max: 10, keyFn: (req) => 'ophone:' + (req.ip || 'x') }),
+    h(async (req, res) => {
+      res.json(await ordersService.setPhone(db, req.params.id, req.body?.phone));
+    })
+  );
+
+  // ---------- رصيد الولاء للزبون (F-17): مسار مقيّد بالمعدل ----------
+  r.get(
+    '/shops/:slug/loyalty',
+    rateLimit({ windowMs: 60000, max: 30, keyFn: (req) => 'loyalty:' + (req.ip || 'x') }),
+    h(async (req, res) => {
+      const shops = require('../services/shops');
+      const loyalty = require('../services/loyalty');
+      const shop = await shops.findBySlug(db, req.params.slug);
+      if (!shop || shop.archived === true) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
+      const phone = typeof req.query.phone === 'string' ? req.query.phone.trim() : '';
+      if (!phone) throw new HttpError(400, 'PHONE_REQUIRED', 'رقم الهاتف مطلوب');
+      res.json(await loyalty.publicBalance(db, shop, phone));
+    })
+  );
+
   // ---------- ويب هوك تيليجرام (NOTIF-04): الربط عبر /start {slug} ----------
   r.post(
     '/notify/telegram',

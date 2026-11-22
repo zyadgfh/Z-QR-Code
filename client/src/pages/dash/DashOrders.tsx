@@ -266,7 +266,9 @@ function OrderCard({
         <span className="rounded-full bg-stone-800 px-3 py-1 text-xs font-black text-white">
           {o.table_number ? `${t('table')} ${o.table_number}` : o.service === 'delivery' ? `🛵 ${t('serviceDelivery')}` : `🥡 ${t('serviceTakeaway')}`}
         </span>
+        {o.branch_name && <span className="rounded-full bg-teal-50 px-2.5 py-1 text-xs font-extrabold text-teal-800">🏢 {o.branch_name}</span>}
         {o.customer_phone && <span className="text-xs font-bold text-stone-400" dir="ltr">{o.customer_phone}</span>}
+        {o.loyalty_discount ? <span className="text-xs font-extrabold text-teal-700" dir="auto">⭐ −{o.loyalty_discount}</span> : null}
         <span className="text-xs font-bold text-stone-400">{t('minAgo')} {Math.max(1, Math.floor((now - o.created_at) / 60000))} {t('min')}</span>
         {o.status === 'preparing' && o.eta_minutes && (
           <span className="rounded-full bg-white px-2 py-0.5 text-xs font-extrabold text-teal-700">⏱ {o.eta_minutes} {t('min')}</span>
