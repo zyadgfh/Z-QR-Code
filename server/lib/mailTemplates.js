@@ -63,4 +63,15 @@ function recoveryLow(name, remaining) {
   return { subject: title, text: `بقيت ${remaining} أكواد استرداد فقط — ولّد مجموعة جديدة.`, html: rtlWrap(title, body, 'إشعار أمني آلي — QR Menu') };
 }
 
-module.exports = { passwordResetCode, passwordChanged, mfaEnabled, mfaDisabled, recoveryLow };
+function invoice(shopName, invoiceNo, months, amount, paidUntilText) {
+  const title = 'فاتورة اشتراك — تم التفعيل';
+  const body = `<p>تم اعتماد دفع اشتراك <b>${esc(shopName)}</b> لمدة <b>${months}</b> شهر.</p>
+<table style="width:100%;margin:14px 0;border-collapse:collapse;font-size:14px">
+<tr><td style="padding:8px;color:#78716c">رقم الفاتورة</td><td style="padding:8px;font-weight:800;direction:ltr;text-align:end">${esc(invoiceNo)}</td></tr>
+<tr><td style="padding:8px;color:#78716c">المبلغ</td><td style="padding:8px;font-weight:800">${amount} ج.م</td></tr>
+<tr><td style="padding:8px;color:#78716c">الاشتراك مدفوع حتى</td><td style="padding:8px;font-weight:800">${esc(paidUntilText)}</td></tr>
+</table>`;
+  return { subject: title, text: `تم اعتماد دفع الاشتراك (${invoiceNo}) — مدفوع حتى ${paidUntilText}`, html: rtlWrap(title, body, 'فاتورة آلية — QR Menu') };
+}
+
+module.exports = { passwordResetCode, passwordChanged, mfaEnabled, mfaDisabled, recoveryLow, invoice };

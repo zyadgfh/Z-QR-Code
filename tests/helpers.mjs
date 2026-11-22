@@ -86,8 +86,8 @@ export async function api(base, path, { method = 'GET', token, body } = {}) {
   return { status: raw.status, json };
 }
 
-export async function raw(base, path) {
-  return request(base, path);
+export async function raw(base, path, opts = {}) {
+  return request(base, path, opts);
 }
 
 export async function login(base, email, password) {

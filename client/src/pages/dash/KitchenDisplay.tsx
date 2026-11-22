@@ -121,7 +121,8 @@ export default function KitchenDisplay() {
           {active.map((o) => (
             <div key={o.id} className="data-card flex flex-col rounded-3xl border border-white/10 bg-stone-800/90 p-4 shadow-apple">
               <div className="mb-3 flex items-center gap-3">
-                <span className="text-4xl font-black">🧾 {o.table_number}</span>
+                <span className="text-4xl font-black">{o.table_number ? `🧾 ${o.table_number}` : o.service === 'delivery' ? '🛵' : '🥡'}</span>
+                {o.customer_phone && <span className="text-sm font-bold text-stone-300" dir="ltr">{o.customer_phone}</span>}
                 {ageChip(now - o.created_at)}
                 <span className={`ms-auto rounded-full px-3 py-1 text-xs font-black ${o.status === 'pending' ? 'bg-red-500/20 text-red-300' : o.status === 'preparing' ? 'bg-amber-500/20 text-amber-300' : 'bg-emerald-500/20 text-emerald-300'}`}>
                   {o.status === 'pending' ? t('newOrders') : o.status === 'preparing' ? t('preparing') : t('ready')}
