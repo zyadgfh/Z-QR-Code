@@ -3,7 +3,7 @@ import { api } from '../../lib/api';
 import { dashT, fmtDate } from '../../lib/i18n';
 import { useAuth, Me } from '../../stores/auth';
 import { useDashLang, useDocDir } from '../../stores/dashlang';
-import { Btn, Err, Field, Input, Modal, Ok, Select, Spinner, StatusChip } from '../../components/ui';
+import { Btn, Card, CardHead, Err, Field, Input, Modal, Ok, Select, Spinner, StatusChip, Textarea } from '../../components/ui';
 import ChangePasswordCard from '../../components/ChangePassword';
 import SecurityCard from '../../components/SecurityCard';
 import MfaGate from '../../components/MfaGate';
@@ -58,7 +58,8 @@ export default function AdminPanel() {
   const [overview, setOverview] = useState<Overview | null>(null);
   const [settings, setSettings] = useState<PlatformSettings | null>(null);
   const [creating, setCreating] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [secBusy, setSecBusy] = useState<string | null>(null);
+  const [secSaved, setSecSaved] = useState<string | null>(null);
   const [resetPw, setResetPw] = useState<AdminShop | null>(null);
   const [error, setError] = useState<string | null>(null);
   const tableRef = useRef<HTMLDivElement>(null);
@@ -137,17 +138,19 @@ export default function AdminPanel() {
     }
   };
 
-  const saveSettings = async () => {
+  const saveSection = async (key: string, patch: Record<string, unknown>) => {
     setError(null);
+    setSecBusy(key);
     try {
-      const out = await api<PlatformSettings>('/api/admin/settings', { method: 'PUT', body: settings });
-      setSettings(out);
-      setSaved(true);
-      setTimeout(() => setSaved(false), 2500);
+      const out = await api<PlatformSettings>('/api/admin/settings', { method: 'PUT', body: patch });
+      setSettings((cur) => (cur ? { ...cur, ...out } : out));
+      setSecSaved(key);
+      setTimeout(() => setSecSaved((k) => (k === key ? null : k)), 2500);
       await load();
     } catch (e: any) {
       setError(e.message);
     }
+    setSecBusy(null);
   };
 
   const exportCsv = async (s: AdminShop) => {
@@ -316,29 +319,54 @@ export default function AdminPanel() {
         {tab === 'settings' && (
           <div className="space-y-4">
             {settings && (
-              <div className="rounded-3xl bg-white p-5 shadow-sm">
-                <h3 className="mb-3 text-sm font-black text-stone-400">⚙️ {t('platformSettings')}</h3>
-                <div className="grid gap-3 sm:grid-cols-[160px_1fr]">
-                  <Field label={t('monthlyPrice')}>
-                    <Input type="number" min={1} value={settings.monthly_price} onChange={(e) => setSettings({ ...settings, monthly_price: Number(e.target.value) })} />
-                  </Field>
-                  <Field label={t('paymentInstructions')}>
-                    <Input value={settings.payment_instructions} onChange={(e) => setSettings({ ...settings, payment_instructions: e.target.value })} />
-                  </Field>
-                </div>
-                <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                  <Field label={t('itemsUsed')}>
-                    <Input type="number" min={1} value={settings.free_item_limit ?? 50} onChange={(e) => setSettings({ ...settings, free_item_limit: Number(e.target.value) })} />
-                  </Field>
-                  <Field label={t('ordersThisMonth')}>
-                    <Input type="number" min={1} value={settings.free_order_limit ?? 200} onChange={(e) => setSettings({ ...settings, free_order_limit: Number(e.target.value) })} />
-                  </Field>
-                </div>
-                <div className="mt-3 flex items-center gap-2">
-                  <Btn onClick={saveSettings}>{t('save')}</Btn>
-                  {saved && <Ok>{t('saved')}</Ok>}
-                </div>
-              </div>
+              <>
+                <Card data-card>
+                  <CardHead icon="💳" title={t('settingsBilling')} desc={t('settingsBillingDesc')} />
+                  <div className="grid gap-4 sm:grid-cols-[200px_1fr]">
+                    <Field label={t('monthlyPrice')}>
+                      <Input type="number" min={1} dir="ltr" value={settings.monthly_price} onChange={(e) => setSettings({ ...settings, monthly_price: Number(e.target.value) })} />
+                    </Field>
+                    <Field label={t('paymentInstructions')}>
+                      <Textarea rows={3} value={settings.payment_instructions} onChange={(e) => setSettings({ ...settings, payment_instructions: e.target.value })} />
+                    </Field>
+                  </div>
+                  <div className="mt-4 flex items-center gap-2">
+                    <Btn
+                      onClick={() => saveSection('billing', { monthly_price: settings.monthly_price, payment_instructions: settings.payment_instructions })}
+                      disabled={secBusy === 'billing'}
+                    >
+                      {secBusy === 'billing' ? '…' : t('saveThisSection')}
+                    </Btn>
+                    {secSaved === 'billing' && <Ok>{t('saved')}</Ok>}
+                  </div>
+                </Card>
+
+                <Card data-card>
+                  <CardHead icon="🧩" title={t('settingsLimits')} desc={t('settingsLimitsDesc')} />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={t('metricItems')}>
+                      <Input type="number" min={1} dir="ltr" value={settings.free_item_limit ?? 50} onChange={(e) => setSettings({ ...settings, free_item_limit: Number(e.target.value) })} />
+                    </Field>
+                    <Field label={t('metricOrdersMonth')}>
+                      <Input type="number" min={1} dir="ltr" value={settings.free_order_limit ?? 200} onChange={(e) => setSettings({ ...settings, free_order_limit: Number(e.target.value) })} />
+                    </Field>
+                  </div>
+                  {overview && (
+                    <p className="mt-3 rounded-2xl bg-[#f5f5f7] px-3.5 py-2.5 text-xs font-bold text-stone-500">
+                      📡 {t('usedNow')}: {t('metricItems')} <b dir="ltr">{overview.items_total}</b> · {t('metricOrdersMonth')} <b dir="ltr">{overview.orders_month}</b> · {t('metricMrr')} <b dir="ltr">{fmtEGP(overview.mrr_estimate)}</b>
+                    </p>
+                  )}
+                  <div className="mt-4 flex items-center gap-2">
+                    <Btn
+                      onClick={() => saveSection('limits', { free_item_limit: settings.free_item_limit ?? 50, free_order_limit: settings.free_order_limit ?? 200 })}
+                      disabled={secBusy === 'limits'}
+                    >
+                      {secBusy === 'limits' ? '…' : t('saveThisSection')}
+                    </Btn>
+                    {secSaved === 'limits' && <Ok>{t('saved')}</Ok>}
+                  </div>
+                </Card>
+              </>
             )}
             <ChangePasswordCard />
             <SecurityCard />

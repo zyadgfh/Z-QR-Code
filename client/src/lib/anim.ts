@@ -56,6 +56,15 @@ export function haloPulse(el: HTMLElement) {
     { boxShadow: '0 0 0 16px rgba(245,158,11,0)', duration: 1.5, repeat: -1, ease: 'power1.out' });
 }
 
+/** هزة أفقية خفيفة (رسائل الخطأ بأسلوب iOS) */
+export function shake(el: HTMLElement | null) {
+  if (!el || reduced()) return;
+  gsap.fromTo(el, { x: 0 }, {
+    x: 0, duration: 0.45, ease: 'power1.out',
+    keyframes: [{ x: -7 }, { x: 6 }, { x: -4 }, { x: 2 }, { x: 0 }],
+  });
+}
+
 /** ظهور هادئ لكل الحاوية عند تحميل الصفحة */
 export function fadeInUp(el: HTMLElement | null) {
   if (!el || reduced()) return;
