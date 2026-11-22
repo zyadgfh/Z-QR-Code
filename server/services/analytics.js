@@ -22,6 +22,7 @@ async function shopAnalytics(db, shopId, days) {
   let revenue = 0;
   let tips = 0;
   let discounts = 0;
+  let taxTotal = 0;
   let loyaltyDiscount = 0;
   let pointsEarned = 0;
   const statusCounts = { pending: 0, preparing: 0, ready: 0, done: 0 };
@@ -36,6 +37,7 @@ async function shopAnalytics(db, shopId, days) {
     revenue += o.total || 0;
     tips += o.tip || 0;
     discounts += o.discount_amount || 0;
+    taxTotal += o.tax_total || 0;
     loyaltyDiscount += o.loyalty_discount || 0;
     pointsEarned += o.points_earned || 0;
     if (statusCounts[o.status] !== undefined) statusCounts[o.status] += 1;
@@ -69,6 +71,7 @@ async function shopAnalytics(db, shopId, days) {
     avg_basket: ordersCount ? round2(revenue / ordersCount) : 0,
     tips_total: round2(tips),
     discount_total: round2(discounts),
+    tax_total: round2(taxTotal),
     loyalty_discount_total: round2(loyaltyDiscount),
     points_earned_total: pointsEarned,
     status_counts: statusCounts,

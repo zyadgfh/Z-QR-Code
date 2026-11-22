@@ -8,6 +8,8 @@ import { Btn, Card, CardHead, Err, Field, Input, Ok, Select, Spinner, StatusChip
 import ChangePasswordCard from '../../components/ChangePassword';
 import DiscountsCard from '../../components/DiscountsCard';
 import BackupCard from '../../components/BackupCard';
+import TaxCard from '../../components/TaxCard';
+import AuditCard from '../../components/AuditCard';
 import BranchesCard from '../../components/BranchesCard';
 import LoyaltyCard from '../../components/LoyaltyCard';
 import { popIn, staggerCards } from '../../lib/anim';
@@ -309,7 +311,9 @@ export default function DashSettings() {
 
       <BranchesCard />
       <LoyaltyCard />
+      <TaxCard />
       <BackupCard />
+      <AuditCard />
       <ChangePasswordCard />
       <DiscountsCard />
     </div>

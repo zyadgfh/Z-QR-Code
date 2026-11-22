@@ -1,21 +1,30 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 import CustomerMenu from './pages/customer/CustomerMenu';
+// الشاشات الثقيلة تُحمَّل كسولًا (D8) — تقسيم الحزمة وتسريع الإقلاع
+const DashMenu = lazy(() => import('./pages/dash/DashMenu'));
+const DashTables = lazy(() => import('./pages/dash/DashTables'));
+const DashSettings = lazy(() => import('./pages/dash/DashSettings'));
+const DashStaff = lazy(() => import('./pages/dash/DashStaff'));
+const DashAnalytics = lazy(() => import('./pages/dash/DashAnalytics'));
+const KitchenDisplay = lazy(() => import('./pages/dash/KitchenDisplay'));
+const AdminPanel = lazy(() => import('./pages/admin/AdminPanel'));
 import CartPage from './pages/customer/CartPage';
 import OrderStatus from './pages/customer/OrderStatus';
 import DashLogin from './pages/dash/DashLogin';
 import DashLayout from './pages/dash/DashLayout';
 import DashOrders from './pages/dash/DashOrders';
-import KitchenDisplay from './pages/dash/KitchenDisplay';
-import DashMenu from './pages/dash/DashMenu';
-import DashTables from './pages/dash/DashTables';
-import DashSettings from './pages/dash/DashSettings';
-import DashStaff from './pages/dash/DashStaff';
-import AdminPanel from './pages/admin/AdminPanel';
-import DashAnalytics from './pages/dash/DashAnalytics';
 import LegalPage from './pages/LegalPage';
 
 export default function App() {
   return (
+    <Suspense
+      fallback={
+        <div className="grid min-h-dvh place-items-center bg-[#f5f5f7]">
+          <span className="h-9 w-9 animate-spin rounded-full border-[3px] border-stone-200 border-t-teal-700" />
+        </div>
+      }
+    >
     <Routes>
       <Route path="/" element={<Navigate to="/dash" replace />} />
       <Route path="/dash/login" element={<DashLogin />} />
@@ -39,5 +48,6 @@ export default function App() {
       <Route path="/:slug/o/:orderId" element={<OrderStatus />} />
       <Route path="*" element={<Navigate to="/dash" replace />} />
     </Routes>
+    </Suspense>
   );
 }

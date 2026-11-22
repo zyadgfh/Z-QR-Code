@@ -17,6 +17,8 @@ type Status = {
   points_earned?: number;
   loyalty_discount: number;
   tip: number;
+  tax_percent: number;
+  tax_total: number;
   rating: { stars: number; comment: string } | null;
   total: number;
   items: { name: string; name_en: string | null; qty: number; unit_price: number; options: { group_name: string; option_name: string; price_delta: number }[]; line_total: number }[];
@@ -163,6 +165,12 @@ export default function OrderStatus() {
             <div className="mt-2 flex justify-between text-sm font-bold text-teal-700">
               <span>⭐ {t('loyaltyDiscount')}</span>
               <span>− {money(lang, st.loyalty_discount)}</span>
+            </div>
+          )}
+          {st.tax_total > 0 && (
+            <div className="mt-2 flex justify-between text-sm font-bold text-stone-500">
+              <span>🧾 {t('taxRow')} ({st.tax_percent}%)</span>
+              <span>{money(lang, st.tax_total)}</span>
             </div>
           )}
           {st.tip > 0 && (

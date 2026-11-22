@@ -4,6 +4,7 @@ const express = require('express');
 const { h, HttpError } = require('../lib/errors');
 const { authenticate } = require('../lib/session');
 const adminService = require('../services/admin');
+const auditService = require('../services/audit');
 const shopsService = require('../services/shops');
 const { ordersCsv } = require('../lib/csv');
 
@@ -61,6 +62,7 @@ module.exports = function adminRoutes(ctx) {
       const amount = Math.round(settings.monthly_price * months);
       const invoice = await ctx.payments.createInvoice({ amount, description: `اشتراك ${months} شهر` });
       const out = await adminService.markPaid(db, req.params.id, { months, invoice });
+      auditService.log(db, { shop_id: req.params.id, user_id: req.user.id, email: req.user.email, role: 'platform_admin' }, 'shop.mark_paid', `${months} شهر — فاتورة ${invoice.invoice_no || ''}`).catch(() => {});
       // فاتورة بريدية للمالك (NOTIF-03) — fire and forget
       const shop = await shopsService.byId(db, req.params.id);
       const mems = await db.query('memberships', [
@@ -110,14 +112,18 @@ module.exports = function adminRoutes(ctx) {
   r.post(
     '/shops/:id/lock',
     h(async (req, res) => {
-      res.json(await adminService.setLocked(db, req.params.id, Boolean(req.body && req.body.locked)));
+      const lk = await adminService.setLocked(db, req.params.id, Boolean(req.body && req.body.locked));
+      auditService.log(db, { shop_id: req.params.id, user_id: req.user.id, email: req.user.email, role: 'platform_admin' }, lk.locked ? 'shop.lock' : 'shop.unlock', '').catch(() => {});
+      res.json(lk);
     })
   );
 
   r.post(
     '/shops/:id/archive',
     h(async (req, res) => {
-      res.json(await adminService.setArchived(db, req.params.id, Boolean(req.body && req.body.archived)));
+      const ar = await adminService.setArchived(db, req.params.id, Boolean(req.body && req.body.archived));
+      auditService.log(db, { shop_id: req.params.id, user_id: req.user.id, email: req.user.email, role: 'platform_admin' }, ar.archived ? 'shop.archive' : 'shop.restore', '').catch(() => {});
+      res.json(ar);
     })
   );
 
