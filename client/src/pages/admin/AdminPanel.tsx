@@ -5,6 +5,9 @@ import { useAuth, Me } from '../../stores/auth';
 import { useDashLang, useDocDir } from '../../stores/dashlang';
 import { Btn, Err, Field, Input, Modal, Ok, Select, Spinner, StatusChip } from '../../components/ui';
 import ChangePasswordCard from '../../components/ChangePassword';
+import SecurityCard from '../../components/SecurityCard';
+import MfaGate from '../../components/MfaGate';
+import { useIdleLogout } from '../../components/useIdleLogout';
 import { staggerCards } from '../../lib/anim';
 
 type AdminShop = {
@@ -43,6 +46,12 @@ export default function AdminPanel() {
 
   const isAdmin = me?.user.role === 'platform_admin';
 
+  // خمول 30 دقيقة → خروج تلقائي (SEC-02)
+  useIdleLogout(() => {
+    useAuth.getState().logout();
+    window.location.assign('/admin?idle=1');
+  }, 30);
+
   const load = useCallback(async () => {
     try {
       const [s, st] = await Promise.all([api<AdminShop[]>('/api/admin/shops'), api<PlatformSettings>('/api/admin/settings')]);
@@ -67,7 +76,16 @@ export default function AdminPanel() {
   }, [isAdmin, load]);
 
   if (!ready) return <Spinner label={t('loading')} />;
-  if (!isAdmin) return <AdminLogin />;
+  if (!isAdmin) return <AdminLogin idle={new URLSearchParams(window.location.search).get('idle') === '1'} />;
+
+  // بوابة التحقق بخطوتين الإلزامية لأدمن المنصة (SEC-03)
+  if (me && me.user.mfa_enforced && !me.user.mfa_enabled) {
+    return (
+      <div dir={lang === 'ar' ? 'rtl' : 'ltr'} className="min-h-dvh bg-[#f5f5f7]">
+        <MfaGate />
+      </div>
+    );
+  }
 
   const act = async (fn: () => Promise<unknown>) => {
     setError(null);
@@ -111,6 +129,7 @@ export default function AdminPanel() {
 
         {/* تغيير كلمة المرور */}
         <ChangePasswordCard />
+        <SecurityCard />
 
         {/* المحلات */}
         <div className="rounded-3xl bg-white p-5 shadow-sm">
@@ -226,17 +245,20 @@ function CreateShopModal({ onClose, onCreated }: { onClose: () => void; onCreate
   );
 }
 
-function AdminLogin() {
+function AdminLogin({ idle = false }: { idle?: boolean }) {
   const { lang } = useDashLang();
   const t = dashT(lang);
   const setToken = useAuth((s) => s.setToken);
   const loadMe = useAuth((s) => s.loadMe);
-  const [phase, setPhase] = useState<'checking' | 'bootstrap' | 'login'>('checking');
+  const [phase, setPhase] = useState<'checking' | 'bootstrap' | 'login' | 'mfa'>('checking');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirm, setConfirm] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(idle ? t('idleNotice') : null);
+  const [mfaToken, setMfaToken] = useState<string | null>(null);
+  const [code, setCode] = useState('');
 
   useEffect(() => {
     fetch('/api/auth/admin-exists')
@@ -259,6 +281,32 @@ function AdminLogin() {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ email, password }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json?.error?.message || 'خطأ');
+      // حساب مفعّل بـ 2FA → خطوة تحدٍّ ثانية بلا توكن كامل (SEC-03)
+      if (json.mfa_required && json.mfa_token) {
+        setMfaToken(json.mfa_token);
+        setPhase('mfa');
+        setBusy(false);
+        return;
+      }
+      await afterAuth(json.token);
+    } catch (err: any) {
+      setError(err.message);
+      setBusy(false);
+    }
+  };
+
+  const submitChallenge = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch('/api/auth/2fa/challenge', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', authorization: `Bearer ${mfaToken}` },
+        body: JSON.stringify({ code }),
       });
       const json = await res.json();
       if (!res.ok) throw new Error(json?.error?.message || 'خطأ');
@@ -292,12 +340,13 @@ function AdminLogin() {
 
   return (
     <form
-      onSubmit={phase === 'bootstrap' ? submitBootstrap : submitLogin}
+      onSubmit={phase === 'bootstrap' ? submitBootstrap : phase === 'mfa' ? submitChallenge : submitLogin}
       className="mx-auto mt-10 w-full max-w-sm rounded-3xl bg-white p-6 shadow-xl"
     >
       <h2 className="mb-1 text-center text-lg font-extrabold text-stone-800">
-        🛡 {phase === 'bootstrap' ? t('setupTitle') : t('adminExistsTitle')}
+        🛡 {phase === 'bootstrap' ? t('setupTitle') : phase === 'mfa' ? t('mfaChallenge') : t('adminExistsTitle')}
       </h2>
+      {notice && <p className="mb-3 rounded-xl bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{notice}</p>}
       {phase === 'bootstrap' && (
         <p className="mb-4 rounded-xl bg-amber-50 px-3 py-2 text-xs font-bold leading-relaxed text-amber-800">
           {t('setupHint')}
@@ -305,6 +354,17 @@ function AdminLogin() {
       )}
       {phase === 'checking' ? (
         <p className="py-6 text-center text-sm text-stone-400">…</p>
+      ) : phase === 'mfa' ? (
+        <div className="space-y-3">
+          <p className="text-sm leading-relaxed text-stone-500">{t('mfaChallengeDesc')}</p>
+          <Field label={t('mfaChallenge')}>
+            <Input dir="ltr" inputMode="numeric" required value={code} onChange={(e) => setCode(e.target.value)} placeholder="123456" autoComplete="one-time-code" />
+          </Field>
+          {error && <Err error={error} />}
+          <Btn type="submit" disabled={busy || !code} className="w-full py-2.5">
+            {busy ? '…' : t('signin')}
+          </Btn>
+        </div>
       ) : (
         <div className="space-y-3">
           <Field label={t('email')}>

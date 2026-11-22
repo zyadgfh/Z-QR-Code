@@ -5,6 +5,8 @@ import { useDashLang, useDocDir } from '../../stores/dashlang';
 import { dashT } from '../../lib/i18n';
 import { Btn, Spinner, StatusChip } from '../../components/ui';
 import { fadeInUp } from '../../lib/anim';
+import MfaGate from '../../components/MfaGate';
+import { useIdleLogout } from '../../components/useIdleLogout';
 
 /** هيكل لوحة المحل بأسلوب macOS: شريط علوي زجاجي، جانب أنيق، محتوى ناعم */
 export default function DashLayout() {
@@ -25,12 +27,27 @@ export default function DashLayout() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
+  // خمول 30 دقيقة → خروج تلقائي مع إشعار (SEC-02)
+  useIdleLogout(() => {
+    useAuth.getState().logout();
+    navigate('/dash/login?idle=1');
+  }, 30);
+
   useEffect(() => {
     if (ready && me) fadeInUp(mainRef.current);
   }, [ready, me]);
 
   if (!ready) return <Spinner label={t('loading')} />;
   if (!me) return <Navigate to="/dash/login" replace />;
+
+  // بوابة التحقق بخطوتين الإلزامية (SEC-03) — تمنع الوصول للوحة قبل التفعيل
+  if (me.user.mfa_enforced && !me.user.mfa_enabled) {
+    return (
+      <div dir={lang === 'ar' ? 'rtl' : 'ltr'} className="min-h-dvh bg-[#f5f5f7]">
+        <MfaGate />
+      </div>
+    );
+  }
 
   const mem: Membership | undefined = me.memberships[0];
   if (!mem) {

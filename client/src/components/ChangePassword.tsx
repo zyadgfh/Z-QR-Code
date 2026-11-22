@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { api } from '../lib/api';
 import { dashT } from '../lib/i18n';
+import { useAuth } from '../stores/auth';
 import { useDashLang } from '../stores/dashlang';
 import { Btn, Err, Field, Input, Ok } from './ui';
 
@@ -8,6 +9,7 @@ import { Btn, Err, Field, Input, Ok } from './ui';
 export default function ChangePasswordCard() {
   const { lang } = useDashLang();
   const t = dashT(lang);
+  const setToken = useAuth((s) => s.setToken);
   const [cur, setCur] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -22,7 +24,12 @@ export default function ChangePasswordCard() {
     if (next !== confirm) return setError(t('passwordMismatch'));
     setBusy(true);
     try {
-      await api('/api/auth/password', { method: 'PUT', body: { current_password: cur, new_password: next } });
+      const res = await api<{ ok: boolean; token?: string }>('/api/auth/password', {
+        method: 'PUT',
+        body: { current_password: cur, new_password: next },
+      });
+      // الخادم أبطل كل الجلسات (token_version) وأعاد توكنًا جديدًا — نستبدله فورًا
+      if (res.token) setToken(res.token);
       setOk(true);
       setCur('');
       setNext('');

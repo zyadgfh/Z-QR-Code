@@ -2,7 +2,7 @@
 
 const express = require('express');
 const { h, HttpError } = require('../lib/errors');
-const { bearerToken, verifyToken } = require('../lib/auth');
+const { authenticate } = require('../lib/session');
 const adminService = require('../services/admin');
 const shopsService = require('../services/shops');
 
@@ -10,15 +10,11 @@ module.exports = function adminRoutes(ctx) {
   const { db, env } = ctx;
   const r = express.Router();
 
-  // ---------- حماية: أدمن المنصة فقط ----------
+  // ---------- حماية: أدمن المنصة فقط (+ جلسات وMFA عبر lib/session) ----------
   r.use(
     h(async (req, res, next) => {
-      const token = bearerToken(req);
-      if (!token) throw new HttpError(401, 'UNAUTHORIZED', 'سجّل الدخول أولًا');
-      const payload = verifyToken(token, env.JWT_SECRET || 'dev-secret-change-me');
-      if (!payload) throw new HttpError(401, 'UNAUTHORIZED', 'انتهت الجلسة، سجّل الدخول من جديد');
-      const user = await db.get('users', payload.sub);
-      if (!user || user.role !== 'platform_admin')
+      const { user } = await authenticate(ctx, req, { enforceMfa: true });
+      if (user.role !== 'platform_admin')
         throw new HttpError(403, 'FORBIDDEN', 'هذه الصفحة لأدمن المنصة فقط');
       req.user = user;
       next();
