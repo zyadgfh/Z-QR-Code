@@ -4,6 +4,7 @@ const express = require('express');
 const { h, HttpError } = require('../lib/errors');
 const { asStr, isEmail } = require('../lib/validate');
 const { authenticate } = require('../lib/session');
+const { sendWithEtag } = require('../lib/etag');
 const menuService = require('../services/menu');
 const ordersService = require('../services/orders');
 const shopsService = require('../services/shops');
@@ -14,6 +15,36 @@ const { parseDataUrl } = require('../services/ai');
 module.exports = function shopRoutes(ctx) {
   const { db, env } = ctx;
   const r = express.Router();
+
+  // ---------- بث لحظي لتغييرات الطلبات (F-01) — قبل الحارس العام لأنه يصادق بنفسه ----------
+  // EventSource لا يستطيع إرسال ترويسات، فيمر التوكن في الاستعلام (توقيع HS256 موثوق به)
+  r.get(
+    '/orders/stream',
+    h(async (req, res) => {
+      const { user } = await authenticate(ctx, { headers: { authorization: `Bearer ${String(req.query.t || '')}` } }, { enforceMfa: false });
+      const mems = await db.query('memberships', [{ field: 'user_id', value: user.id }]);
+      if (!mems.length) throw new HttpError(403, 'NO_SHOP', 'لا يوجد محل مرتبط بهذا الحساب');
+      const shopId = mems[0].shop_id;
+      res.writeHead(200, {
+        'content-type': 'text/event-stream; charset=utf-8',
+        'cache-control': 'no-cache, no-transform',
+        connection: 'keep-alive',
+        'x-accel-buffering': 'no',
+      });
+      res.write(': connected\n\n');
+      const ping = setInterval(() => {
+        try { res.write(': ping\n\n'); } catch { /* مقفول */ }
+      }, 25000);
+      const unsub = typeof db.onOrders === 'function' ? db.onOrders(shopId, () => {
+        try { res.write('data: changed\n\n'); } catch { /* مقفول */ }
+      }) : null;
+      req.on('close', () => {
+        clearInterval(ping);
+        if (unsub) unsub();
+        try { res.end(); } catch { /* مقفول */ }
+      });
+    })
+  );
 
   // ---------- الحماية: مستخدم مسجّل + عضوية محل (+ جلسات وMFA عبر lib/session) ----------
   r.use(
@@ -69,9 +100,38 @@ module.exports = function shopRoutes(ctx) {
   r.get(
     '/orders',
     h(async (req, res) => {
-      res.json(await ordersService.listForShop(db, req.member.shop_id));
+      sendWithEtag(req, res, await ordersService.listForShop(db, req.member.shop_id));
     })
   );
+
+  // ---------- Web Push (NOTIF-01): المفتاح العام + تسجيل/إلغاء اشتراك جهاز ----------
+  r.get('/push/key', h(async (req, res) => {
+    res.json({ enabled: !!ctx.notifier?.pushEnabled, key: ctx.notifier?.publicKey || null });
+  }));
+
+  r.post('/push/subscribe', h(async (req, res) => {
+    const sub = req.body && req.body.subscription;
+    if (!sub || typeof sub.endpoint !== 'string' || !sub.keys || !sub.keys.p256dh || !sub.keys.auth)
+      throw new HttpError(400, 'BAD_SUBSCRIPTION', 'اشتراك غير صالح');
+    const id = require('crypto').createHash('sha256').update(sub.endpoint).digest('hex').slice(0, 32);
+    await db.set('push_subscriptions', id, {
+      shop_id: req.member.shop_id,
+      user_id: req.user.id,
+      endpoint: sub.endpoint,
+      keys: sub.keys,
+      created_at: Date.now(),
+    });
+    res.json({ ok: true });
+  }));
+
+  r.post('/push/unsubscribe', h(async (req, res) => {
+    const endpoint = req.body && req.body.endpoint;
+    if (typeof endpoint === 'string' && endpoint) {
+      const id = require('crypto').createHash('sha256').update(endpoint).digest('hex').slice(0, 32);
+      await db.delete('push_subscriptions', id).catch(() => {});
+    }
+    res.json({ ok: true });
+  }));
 
   r.post(
     '/orders/:id/accept',

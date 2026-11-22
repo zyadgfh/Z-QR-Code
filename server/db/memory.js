@@ -10,6 +10,25 @@ class MemoryDB {
     this.cols = new Map();
     this.files = new Map();
     this.fileCounter = 0;
+    // اشتراكات البث اللحظي للطلبات (F-01): shopId -> Set<callback>
+    this.ordersSubs = new Map();
+  }
+
+  _notifyOrders(shopId) {
+    const subs = this.ordersSubs.get(shopId);
+    if (!subs) return;
+    for (const cb of subs) {
+      try { cb(); } catch { /* مستSubscriber ميت */ }
+    }
+  }
+
+  /** اشتراك لحظي بتغييرات طلبات محل — يُرجع دالة إلغاء */
+  onOrders(shopId, cb) {
+    if (!this.ordersSubs.has(shopId)) this.ordersSubs.set(shopId, new Set());
+    this.ordersSubs.get(shopId).add(cb);
+    return () => {
+      this.ordersSubs.get(shopId)?.delete(cb);
+    };
   }
 
   col(name) {
@@ -42,6 +61,7 @@ class MemoryDB {
   async set(c, id, doc) {
     const full = { ...doc, id };
     this.col(c).set(id, full);
+    if (c === 'orders') this._notifyOrders(full.shop_id);
     return { ...full };
   }
 
@@ -49,6 +69,7 @@ class MemoryDB {
     const doc = this.col(c).get(id);
     if (!doc) throw new Error(`not found: ${c}/${id}`);
     Object.assign(doc, patch);
+    if (c === 'orders') this._notifyOrders(doc.shop_id);
     return { ...doc };
   }
 

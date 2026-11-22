@@ -28,6 +28,17 @@ class FirestoreDB {
     this.bucket = admin.storage().bucket();
   }
 
+  /** اشتراك لحظي بتغييرات طلبات محل (F-01) — عبر onSnapshot؛ يُرجع دالة إلغاء */
+  onOrders(shopId, cb) {
+    const unsub = this.db
+      .collection('orders')
+      .where('shop_id', '==', shopId)
+      .onSnapshot(() => {
+        try { cb(); } catch { /* مستمع ميت */ }
+      });
+    return unsub;
+  }
+
   async get(c, id) {
     const snap = await this.db.collection(c).doc(id).get();
     return snap.exists ? { id: snap.id, ...snap.data() } : null;
