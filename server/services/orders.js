@@ -17,6 +17,7 @@ const adminService = require('./admin');
 async function createPublicOrder(db, slug, payload = {}) {
   const shop = await shops.findBySlug(db, slug);
   if (!shop) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
+  if (shop.archived === true) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
   if (!shops.isOpen(shop)) {
     throw new HttpError(423, 'SHOP_CLOSED', 'المنيو غير متاح مؤقتًا');
   }

@@ -74,4 +74,12 @@ function invoice(shopName, invoiceNo, months, amount, paidUntilText) {
   return { subject: title, text: `تم اعتماد دفع الاشتراك (${invoiceNo}) — مدفوع حتى ${paidUntilText}`, html: rtlWrap(title, body, 'فاتورة آلية — QR Menu') };
 }
 
-module.exports = { passwordResetCode, passwordChanged, mfaEnabled, mfaDisabled, recoveryLow, invoice };
+function ownerCredentials(shopName, password) {
+  const title = 'بيانات دخول لوحة المحل';
+  const body = `<p>تم إعادة تعيين كلمة مرور لوحة محل <b>${esc(shopName)}</b> بواسطة إدارة المنصة.</p>
+<p>كلمة المرور الجديدة: <b style="direction:ltr;display:inline-block;font-family:monospace;font-size:16px">${esc(password)}</b></p>
+<p style="color:#78716c;font-size:13px">يُنصح بتغييرها من إعدادات الأمان بعد الدخول. هذه كلمة المرور لن تُعرض مرة أخرى.</p>`;
+  return { subject: title, text: `كلمة مرور جديدة للوحة ${shopName}: ${password}`, html: rtlWrap(title, body, 'بيانات دخول — QR Menu') };
+}
+
+module.exports = { passwordResetCode, passwordChanged, mfaEnabled, mfaDisabled, recoveryLow, invoice, ownerCredentials };

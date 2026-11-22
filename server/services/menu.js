@@ -278,6 +278,7 @@ async function publicMenu(db, slug) {
   const shops = require('./shops');
   const shop = await shops.findBySlug(db, slug);
   if (!shop) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
+  if (shop.archived === true) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
   const shopStatus = shops.statusOf(shop);
   if (shopStatus === 'locked') {
     return { open: false, reason: shopStatus, shop: { slug: shop.slug, name: shop.name, logo_url: shop.logo_url } };

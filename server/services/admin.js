@@ -6,8 +6,12 @@ const shops = require('./shops');
 
 // ---------- لوحة المنصة (الأدمن فقط) ----------
 
-async function listShops(db) {
-  const rows = await db.query('shops', []);
+async function listShops(db, { q, archived } = {}) {
+  let rows = await db.query('shops', []);
+  // الأرشيف: افتراضيًا تُستثنى المحلات المؤرشفة؛ ?archived=1 يرجع المؤرشفة فقط
+  rows = String(archived) === '1' ? rows.filter((s) => s.archived === true) : rows.filter((s) => s.archived !== true);
+  // بحث اختياري بالاسم/الرابط/بريد المالك
+  const needle = typeof q === 'string' ? q.trim().toLowerCase() : '';
   const mems = await db.query('memberships', [{ field: 'role', value: 'owner' }]);
   const users = await db.query('users', []);
   const usersById = new Map(users.map((u) => [u.id, u]));
@@ -17,6 +21,12 @@ async function listShops(db) {
       const u = usersById.get(m.user_id);
       if (u) ownerByShop.set(m.shop_id, u.email);
     }
+  }
+  if (needle) {
+    rows = rows.filter((s) => {
+      const owner = (s.owner_email || ownerByShop.get(s.id) || '').toLowerCase();
+      return s.name.toLowerCase().includes(needle) || s.slug.toLowerCase().includes(needle) || owner.includes(needle);
+    });
   }
   return rows
     .map((s) => ({
@@ -32,6 +42,7 @@ async function listShops(db) {
       trial_ends_at: s.trial_ends_at,
       paid_until: s.paid_until,
       locked: s.locked,
+      archived: s.archived === true,
       status: shops.statusOf(s),
     }))
     .sort((a, b) => b.created_at - a.created_at);
@@ -60,6 +71,90 @@ async function setPlan(db, shopId, plan) {
   if (!shop) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
   if (plan !== 'free' && plan !== 'pro') throw new HttpError(400, 'INVALID_PLAN', 'الخطة يجب أن تكون free أو pro');
   return db.update('shops', shopId, { plan });
+}
+
+/** أرشفة/استعادة محل — الأرشفة تخفيه من الزبائن (404) ومن القائمة الافتراضية */
+async function setArchived(db, shopId, archived) {
+  const shop = await shops.byId(db, shopId);
+  if (!shop) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
+  return db.update('shops', shopId, { archived: archived === true });
+}
+
+/** نظرة عامة على المنصة: مقاييس المحلات والطلبات والإيراد المتوقع */
+async function overview(db) {
+  const [rows, orders, items, settings] = await Promise.all([
+    db.query('shops', []),
+    db.query('orders', []),
+    db.query('items', []),
+    getSettings(db),
+  ]);
+  const live = rows.filter((s) => s.archived !== true);
+  const dayStart = new Date();
+  dayStart.setHours(0, 0, 0, 0);
+  const monthStart = new Date();
+  monthStart.setDate(1);
+  monthStart.setHours(0, 0, 0, 0);
+  const counts = { free: 0, pro: 0, trial: 0, active: 0, locked: 0 };
+  for (const s of live) {
+    counts[s.plan || 'free'] += 1;
+    counts[shops.statusOf(s)] += 1;
+  }
+  return {
+    shops_total: live.length,
+    shops_free: counts.free,
+    shops_pro: counts.pro,
+    shops_trial: counts.trial,
+    shops_active: counts.active,
+    shops_locked: counts.locked,
+    shops_archived: rows.length - live.length,
+    orders_today: orders.filter((o) => o.created_at >= dayStart.getTime()).length,
+    orders_month: orders.filter((o) => o.created_at >= monthStart.getTime()).length,
+    items_total: items.length,
+    mrr_estimate: Math.round(counts.pro * settings.monthly_price),
+    monthly_price: settings.monthly_price,
+  };
+}
+
+/** إعادة تعيين كلمة مرور المالك: كلمة مولدة (أو مقدمة) تُعرض مرة واحدة + إبطال جلساته */
+async function resetOwnerPassword(db, shopId, password) {
+  const shop = await shops.byId(db, shopId);
+  if (!shop) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
+  const mems = await db.query('memberships', [
+    { field: 'shop_id', value: shopId },
+    { field: 'role', value: 'owner' },
+  ]);
+  let user = mems[0] ? await db.get('users', mems[0].user_id) : null;
+  if (!user && shop.owner_email) {
+    const users = await db.query('users', [{ field: 'email', value: shop.owner_email }]);
+    user = users[0];
+  }
+  if (!user) throw new HttpError(404, 'NO_OWNER', 'لا يوجد مالك مرتبط بهذا المحل');
+  let pw;
+  let generated = false;
+  if (typeof password === 'string' && password.length > 0) {
+    if (password.length < 6) throw new HttpError(400, 'INVALID_PASSWORD', 'كلمة المرور 6 أحرف على الأقل');
+    pw = password;
+  } else {
+    pw = genPassword();
+    generated = true;
+  }
+  const { hashPassword } = require('../lib/auth');
+  await db.update('users', user.id, {
+    password_hash: hashPassword(pw),
+    token_version: (user.token_version || 0) + 1,
+  });
+  return { email: user.email, password: pw, generated };
+}
+
+/** كلمة مرور مقروءة 3×4 من حروف بلا ملتبسات */
+function genPassword() {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ23456789';
+  const pick = (n) => {
+    let s = '';
+    for (let i = 0; i < n; i++) s += alphabet[Math.floor(Math.random() * alphabet.length)];
+    return s;
+  };
+  return `${pick(4)}-${pick(4)}-${pick(4)}`;
 }
 
 // ---------- إعدادات المنصة ----------
@@ -114,4 +209,4 @@ async function updateSettings(db, patch = {}) {
   return out;
 }
 
-module.exports = { listShops, markPaid, setLocked, setPlan, getSettings, updateSettings };
+module.exports = { listShops, markPaid, setLocked, setPlan, setArchived, overview, resetOwnerPassword, getSettings, updateSettings };

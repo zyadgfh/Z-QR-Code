@@ -23,9 +23,16 @@ module.exports = function adminRoutes(ctx) {
   );
 
   r.get(
+    '/overview',
+    h(async (req, res) => {
+      res.json(await adminService.overview(db));
+    })
+  );
+
+  r.get(
     '/shops',
     h(async (req, res) => {
-      res.json(await adminService.listShops(db));
+      res.json(await adminService.listShops(db, { q: req.query.q, archived: req.query.archived }));
     })
   );
 
@@ -104,6 +111,31 @@ module.exports = function adminRoutes(ctx) {
     '/shops/:id/lock',
     h(async (req, res) => {
       res.json(await adminService.setLocked(db, req.params.id, Boolean(req.body && req.body.locked)));
+    })
+  );
+
+  r.post(
+    '/shops/:id/archive',
+    h(async (req, res) => {
+      res.json(await adminService.setArchived(db, req.params.id, Boolean(req.body && req.body.archived)));
+    })
+  );
+
+  r.post(
+    '/shops/:id/reset-owner-password',
+    h(async (req, res) => {
+      const out = await adminService.resetOwnerPassword(db, req.params.id, req.body && req.body.password);
+      // بيانات الدخول الجديدة بريدًا للمالك (NOTIF-03) — fire and forget
+      const shop = await shopsService.byId(db, req.params.id);
+      if (out.email && ctx.mailer) {
+        ctx.mailer
+          .send({
+            to: out.email,
+            ...require('../lib/mailTemplates').ownerCredentials((shop && shop.name) || '', out.password),
+          })
+          .catch(() => {});
+      }
+      res.json(out);
     })
   );
 
