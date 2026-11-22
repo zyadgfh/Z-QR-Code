@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useOutletContext } from 'react-router-dom';
 import { api } from '../../lib/api';
 import { dashT, timeAgo } from '../../lib/i18n';
@@ -6,40 +6,25 @@ import { useDashLang } from '../../stores/dashlang';
 import { alertBeep, ensureAudio } from '../../lib/sound';
 import { Btn, Err, Input, Label, Modal, Spinner } from '../../components/ui';
 import { staggerCards } from '../../lib/anim';
+import { useOrdersLive, type Order } from '../../hooks/useOrdersLive';
+import { enablePush, disablePush } from '../../lib/push';
 
-type OrderItem = {
-  item_id: string;
-  name: string;
-  name_en: string | null;
-  qty: number;
-  unit_price: number;
-  options: { group_name: string; option_name: string; price_delta: number }[];
-  line_total: number;
-};
-export type Order = {
-  id: string;
-  table_number: number;
-  note: string;
-  total: number;
-  status: 'pending' | 'preparing' | 'ready' | 'done';
-  eta_minutes: number | null;
-  created_at: number;
-  accepted_at: number | null;
-  items: OrderItem[];
-};
+export type { Order };
+export type { OrderItem } from '../../hooks/useOrdersLive';
 
 export default function DashOrders() {
   const { mem } = useOutletContext<{ mem: { role: 'owner' | 'staff' } }>();
   const { lang } = useDashLang();
   const t = dashT(lang);
 
-  const [orders, setOrders] = useState<Order[] | null>(null);
-  const [error, setError] = useState<unknown>(null);
+  const { orders, error, load, live } = useOrdersLive();
   const [now, setNow] = useState(Date.now());
   const [accepting, setAccepting] = useState<Order | null>(null);
   const [eta, setEta] = useState(15);
   const listRef = useRef<HTMLDivElement>(null);
   const lastCount = useRef<number | null>(null);
+  const [pushOn, setPushOn] = useState(() => localStorage.getItem('qm-push') === '1');
+  const [pushError, setPushError] = useState<string | null>(null);
 
   // الصوت: مفعّل بعد أول لمسة، ومحفوظ لزيارات لاحقة
   const [soundOn, setSoundOn] = useState(() => localStorage.getItem('qm-sound') === '1');
@@ -54,25 +39,11 @@ export default function DashOrders() {
     }
   }, [orders]);
 
-  const load = useCallback(async () => {
-    try {
-      const list = await api<Order[]>('/api/shop/orders');
-      setOrders(list);
-      setError(null);
-    } catch (e) {
-      setError(e);
-    }
-  }, []);
-
+  // عدّاد الوقت لأعمار الطلبات
   useEffect(() => {
-    load();
-    const poll = setInterval(load, 4000);
     const tick = setInterval(() => setNow(Date.now()), 20000);
-    return () => {
-      clearInterval(poll);
-      clearInterval(tick);
-    };
-  }, [load]);
+    return () => clearInterval(tick);
+  }, []);
 
   // صفير متكرر ما دام هناك طلبات في الانتظار + صفير فوري عند طلب جديد
   useEffect(() => {
@@ -92,6 +63,25 @@ export default function DashOrders() {
     if (next) setTimeout(alertBeep, 120);
   };
 
+  // تنبيهات المتصفح (NOTIF-01): تظهر حتى والتبويب مغلق
+  const togglePush = async () => {
+    if (pushOn) {
+      await disablePush();
+      setPushOn(false);
+      localStorage.removeItem('qm-push');
+      return;
+    }
+    const r = await enablePush();
+    if (r === 'ok') {
+      setPushOn(true);
+      localStorage.setItem('qm-push', '1');
+    } else if (r === 'denied') {
+      setPushError(t('pushBlocked'));
+    } else {
+      setPushError(t('pushUnsupported'));
+    }
+  };
+
   const act = async (fn: () => Promise<unknown>) => {
     await fn;
     await load();
@@ -109,16 +99,24 @@ export default function DashOrders() {
     <div ref={listRef} className="space-y-4">
       {/* شريط الحالة */}
       <div className="flex flex-wrap items-center gap-2">
-        <span className="flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-stone-600 shadow-sm">
+        <span className={`flex items-center gap-1.5 rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-stone-600 shadow-sm ${live ? '' : 'opacity-60'}`}>
           <span className="relative flex h-2 w-2">
             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-green-400 opacity-75" />
-            <span className="relative inline-flex h-2 w-2 rounded-full bg-green-500" />
+            <span className={`relative inline-flex h-2 w-2 rounded-full ${live ? 'bg-green-500' : 'bg-stone-400'}`} />
           </span>
           {t('live')}
         </span>
         <span className="rounded-full bg-white px-3 py-1.5 text-xs font-extrabold text-stone-600 shadow-sm">
           {t('newOrders')}: <span className={pendingCount ? 'text-red-600' : ''}>{pendingCount}</span>
         </span>
+        <button
+          onClick={togglePush}
+          className={`rounded-full px-4 py-1.5 text-xs font-extrabold shadow-sm transition ${
+            pushOn ? 'bg-teal-700 text-white' : 'bg-white text-stone-600 hover:bg-stone-50'
+          }`}
+        >
+          {pushOn ? `🔔 ${t('pushOn')}` : `🔕 ${t('pushEnable')}`}
+        </button>
         <button
           onClick={toggleSound}
           className={`ms-auto rounded-full px-4 py-1.5 text-xs font-extrabold shadow-sm transition ${
@@ -132,6 +130,12 @@ export default function DashOrders() {
       {!soundOn && pendingCount > 0 && (
         <div className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-sm font-extrabold text-amber-800">
           ⚠️ {t('soundOffWarn')}
+        </div>
+      )}
+
+      {pushError && (
+        <div className="rounded-2xl border border-red-300 bg-red-50 px-4 py-3 text-sm font-extrabold text-red-700">
+          ⚠️ {pushError}
         </div>
       )}
 

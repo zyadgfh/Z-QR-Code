@@ -80,3 +80,26 @@ gcloud firestore import gs://elmohandes7stock-backups/firestore-YYYY-MM-DD
 | UPSTASH_REDIS_REST_URL/TOKEN | مستحسن | §3 |
 | RESEND_API_KEY / MAIL_FROM | مستحسن | §4 |
 | MFA_ENFORCED | افتراضي 1 | §5 |
+
+## 7) NOTIF-04 — تيليجرام (أسرع قناة: دقائق)
+1. في تيليجرام: @BotFather → `/newbot` → احفظ التوكن في Vercel: `TELEGRAM_BOT_TOKEN`.
+2. اختر سرًا عشوائيًا وأضفه: `TELEGRAM_WEBHOOK_SECRET`.
+3. سجّل الويب هوك (استبدل DOMAIN والسر):
+```bash
+curl "https://api.telegram.org/bot<TOKEN>/setWebhook" \
+  -d "url=https://DOMAIN/api/public/notify/telegram" \
+  -d "secret_token=<TELEGRAM_WEBHOOK_SECRET>"
+```
+4. الربط: صاحب المحل يفتح البوت ويرسل `/start {slug}` (مثل `/start nile-cafe`) — يُخزَّن chat_id تلقائيًا ويصله تأكيد. لكل محل محادثة واحدة (الأحدث تفوز).
+
+## 8) NOTIF-02 — واتساب Cloud API
+1. Meta Business + تطبيق WhatsApp → Phone Number ID → مفاتيح دائمة.
+2. أضف في Vercel: `WHATSAPP_TOKEN` و`WHATSAPP_PHONE_ID`.
+3. الشرط: `shop.phone` بصيغة دولية بلا + (مثل `201012345678`) — يُرسل عند توفرها. القوالب الحرة تعمل داخل نافذة 24 ساعة؛ للرسائل الأولى خارجها أضف قالبًا معتمدًا في Meta ووسّع `notifier.js`.
+
+## 9) NOTIF-01 — Web Push (لوحة الطلبات)
+```bash
+npx web-push generate-vapid-keys
+```
+- أضف `VAPID_PUBLIC_KEY` و`VAPID_PRIVATE_KEY` (+`VAPID_SUBJECT`) في Vercel.
+- زر «🔔 تنبيهات المتصفح» يظهر في لوحة الطلبات — يطلب الإذن ويسجل الجهاز؛ الإشعار يصل حتى والتبويب مغلق. الاشتراكات الميتة (404/410) تُحذف تلقائيًا.
