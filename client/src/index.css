@@ -81,3 +81,115 @@ h1, h2, h3 {
 .menu-theme-sunset h2 { color: #9a3412; }
 .menu-theme-mono { background: #f8f8f8 !important; }
 .menu-theme-mono .m-item { background: #ffffff; border-color: #e5e5e5; box-shadow: none; }
+
+/* ============================================================
+   نظام التصميم المركزي (D7) — توكنات + مظهر فاتح/داكن/نظام
+   المرجع: apple-design-skill (HIG) + greensock/gsap-skills
+   - الأسطح والنصوص والحدود عبر متغيرات مركزية
+   - الوضع الداكن: كلاس .dark على <html> (تفضيل المستخدم محفوظ)
+   - طبقة القلب: unlayered CSS يتغلب على utilities الطبقية في Tailwind v4
+     فيُغطي كل الصفحات القائمة دون تعديل ملف-بملف
+   ============================================================ */
+
+:root {
+  --bg: #f5f5f7;
+  --surface: #ffffff;
+  --surface-2: #f5f5f7;
+  --surface-3: #ebebed;
+  --text: #1d1d1f;
+  --text-2: #48484d;
+  --text-muted: #8e8e93;
+  --border: rgba(0, 0, 0, 0.07);
+  --accent: #0f766e;
+  --accent-strong: #115e59;
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-float-bg: rgba(255, 255, 255, 0.82);
+  --glass-border: rgba(0, 0, 0, 0.06);
+  --shadow-apple: 0 1px 2px rgba(0, 0, 0, 0.04), 0 8px 24px rgba(0, 0, 0, 0.06);
+  --ring: rgba(15, 118, 110, 0.35);
+}
+
+html.dark {
+  --bg: #1c1c1e;
+  --surface: #2c2c2e;
+  --surface-2: #1c1c1e;
+  --surface-3: #3a3a3c;
+  --text: #f2f2f7;
+  --text-2: #d1d1d6;
+  --text-muted: #8e8e93;
+  --border: rgba(255, 255, 255, 0.09);
+  --accent: #2dd4bf;
+  --accent-strong: #5eead4;
+  --glass-bg: rgba(28, 28, 30, 0.72);
+  --glass-float-bg: rgba(44, 44, 46, 0.82);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --shadow-apple: 0 1px 2px rgba(0, 0, 0, 0.35), 0 8px 24px rgba(0, 0, 0, 0.45);
+  --ring: rgba(45, 212, 191, 0.4);
+}
+
+body {
+  transition: background-color 0.25s ease, color 0.25s ease;
+}
+
+/* ---------- قلب المظهر: تجاوزات utilities تحت .dark ---------- */
+.dark .bg-white { background-color: var(--surface); }
+.dark .bg-\[\#f5f5f7\] { background-color: var(--bg); }
+.dark .bg-stone-50 { background-color: var(--surface-2); }
+.dark .bg-stone-100 { background-color: var(--surface-3); }
+.dark .bg-stone-200 { background-color: var(--surface-3); }
+.dark .bg-stone-800 { background-color: #3a3a3c; }
+
+.dark .text-stone-900 { color: var(--text); }
+.dark .text-stone-800 { color: var(--text); }
+.dark .text-stone-700 { color: var(--text-2); }
+.dark .text-stone-600 { color: var(--text-2); }
+.dark .text-stone-500 { color: var(--text-muted); }
+.dark .text-stone-400 { color: var(--text-muted); }
+.dark .text-stone-300 { color: #636366; }
+
+.dark .border-stone-100 { border-color: var(--border); }
+.dark .border-stone-200 { border-color: var(--border); }
+.dark .border-stone-300 { border-color: var(--border); }
+.dark .border-black\/\[0\.04\] { border-color: var(--border); }
+
+.dark .text-teal-700 { color: var(--accent-strong); }
+.dark .text-teal-800 { color: var(--accent-strong); }
+.dark .bg-teal-50 { background-color: rgba(45, 212, 191, 0.12); }
+.dark .bg-teal-600 { background-color: #0d9488; }
+
+.dark .bg-amber-50 { background-color: rgba(245, 158, 11, 0.12); }
+.dark .border-amber-200 { border-color: rgba(245, 158, 11, 0.25); }
+.dark .text-amber-800, .dark .text-amber-900 { color: #fbbf24; }
+.dark .text-amber-500 { color: #f59e0b; }
+.dark .bg-red-50 { background-color: rgba(239, 68, 68, 0.14); }
+.dark .bg-red-500\/10 { background-color: rgba(239, 68, 68, 0.2); }
+
+/* الأسطح الزجاجية (Liquid Glass — تتحول داكنة تلقائيًا) */
+.dark .glass {
+  background: var(--glass-bg);
+  border-bottom-color: var(--glass-border);
+}
+.dark .glass-float { background: var(--glass-float-bg); }
+.dark .shadow-apple { box-shadow: var(--shadow-apple); }
+
+/* حلقات التركيز المرئية (إتاحة — HIG: visible focus) */
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+  border-radius: 10px;
+}
+
+/* شريط تمرير هادئ */
+* { scrollbar-width: thin; scrollbar-color: rgba(128,128,128,0.35) transparent; }
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-thumb { background: rgba(128,128,128,0.35); border-radius: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+
+/* تقليل الحركة — احترام تفضيل المستخدم (HIG + gsap matchMedia) */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
