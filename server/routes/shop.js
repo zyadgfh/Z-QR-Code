@@ -2,6 +2,7 @@
 
 const express = require('express');
 const { h, HttpError } = require('../lib/errors');
+const { rateLimit } = require('../lib/ratelimit');
 const { asStr, isEmail } = require('../lib/validate');
 const { authenticate } = require('../lib/session');
 const { sendWithEtag } = require('../lib/etag');
@@ -289,6 +290,33 @@ module.exports = function shopRoutes(ctx) {
         model: env.GEMINI_MODEL || aiService.DEFAULT_MODEL,
       });
       res.json(proposal);
+    })
+  );
+
+  // ---------- توليد صورة صنف بالذكاء الاصطناعي من الاسم (D7) — صلاحية menu، محدود المعدل ----------
+  r.post(
+    '/items/:id/generate-image',
+    rateLimit({ windowMs: 60000, max: 12, keyFn: (req) => 'imgen:' + (req.member && req.member.user_id) || req.ip || 'x' }),
+    h(async (req, res) => {
+      requirePerm(req, 'menu');
+      const item = await db.get('items', req.params.id);
+      if (!item || item.shop_id !== req.member.shop_id) throw new HttpError(404, 'NOT_FOUND', 'الصنف غير موجود');
+      const cat = item.category_id ? await db.get('categories', item.category_id) : null;
+      const img = await aiService.generateItemImage({
+        name: item.name,
+        name_en: item.name_en,
+        description: item.description,
+        category: cat ? cat.name : null,
+        apiKey: env.GEMINI_API_KEY,
+        model: env.GEMINI_IMAGE_MODEL || aiService.DEFAULT_IMAGE_MODEL,
+      });
+      const buffer = Buffer.from(img.data, 'base64');
+      if (!buffer.length) throw new HttpError(502, 'AI_BAD_IMAGE', 'صورة غير صالحة من الخدمة');
+      const ext = (img.mime.split('/')[1] || 'png').replace(/[^\w]/g, '') || 'png';
+      const filename = `ai-${item.id}-${Date.now()}.${ext}`;
+      const url = await db.saveImage(req.member.shop_id, filename, buffer, img.mime);
+      await db.update('items', item.id, { photo_url: url });
+      res.json({ photo_url: url });
     })
   );
 

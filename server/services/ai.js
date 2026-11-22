@@ -323,4 +323,60 @@ async function askMenu({ question, menuContext, apiKey, model, fetchImpl } = {})
   return { answer: text.slice(0, 900) };
 }
 
-module.exports = { extractMenu, translateMenu, askMenu, normalizeDraft, parseDataUrl, DEFAULT_MODEL };
+/**
+ * توليد صورة صنف من اسمه (D7): نداء خادمي — نموذج الصور الحالي عبر generateContent
+ * مع responseModalities ['IMAGE']؛ الصورة تُعاد base64 وتُحفظ عبر تخزين المحل.
+ * الافتراضي قابل للتجاوز بمتغير البيئة GEMINI_IMAGE_MODEL.
+ */
+const DEFAULT_IMAGE_MODEL = 'gemini-3.1-flash-image-preview';
+
+async function generateItemImage({ name, name_en, description, category, apiKey, model, fetchImpl } = {}) {
+  if (!apiKey) {
+    throw new HttpError(503, 'AI_NOT_CONFIGURED', 'توليد الصور غير مفعّل بعد — يحتاج صاحب المنصة لإضافة GEMINI_API_KEY');
+  }
+  const dish = typeof name === 'string' ? name.trim().slice(0, 120) : '';
+  if (!dish) throw new HttpError(400, 'NAME_REQUIRED', 'اسم الصنف مطلوب لتوليد الصورة');
+
+  const prompt =
+    'Professional food photography for a restaurant menu item.\n' +
+    'Dish: ' + dish + (name_en ? ' (' + name_en + ')' : '') + (category ? ' — category: ' + category : '') + (description ? '. Description: ' + String(description).slice(0, 150) : '') + '.\n' +
+    'One appetizing serving, plated beautifully, soft natural studio lighting, shallow depth of field, clean neutral background.\n' +
+    'Square composition, the food fills the frame.\n' +
+    'No text, no logos, no watermarks, no people, no hands.';
+
+  const doFetch = fetchImpl || globalThis.fetch;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_IMAGE_MODEL}:generateContent`;
+  const body = {
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: {
+      responseModalities: ['IMAGE'],
+      imageConfig: { aspectRatio: '1:1', imageSize: '1K' },
+    },
+  };
+
+  let res;
+  try {
+    res = await doFetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new HttpError(502, 'AI_UNREACHABLE', 'تعذر الوصول لخدمة توليد الصور — حاول بعد قليل');
+  }
+  if (!res.ok) {
+    throw new HttpError(502, 'AI_ERROR', `فشل توليد الصورة (رمز ${res.status}) — تأكد من تفعيل نموذج الصور لمفتاح API ثم حاول مجددًا`);
+  }
+  const json = await res.json();
+  let img = null;
+  try {
+    img = (json.candidates[0].content.parts || []).find((p) => p.inlineData && p.inlineData.data) || null;
+  } catch {
+    img = null;
+  }
+  if (!img) throw new HttpError(502, 'AI_NO_IMAGE', 'لم تُنتج الخدمة صورة — حاول مرة أخرى بعد قليل');
+  const mime = /^image\/[\w.+-]+$/.test(String(img.inlineData.mimeType || '')) ? img.inlineData.mimeType : 'image/png';
+  return { mime, data: String(img.inlineData.data) };
+}
+
+module.exports = { extractMenu, translateMenu, askMenu, generateItemImage, normalizeDraft, parseDataUrl, DEFAULT_MODEL, DEFAULT_IMAGE_MODEL };
