@@ -132,28 +132,51 @@ export default function DashTables() {
   const [busy, setBusy] = useState(false);
   const [qrUrls, setQrUrls] = useState<Record<number, string>>({});
   const [style, setStyle] = useState<Style>(() => (localStorage.getItem('qm-qr-style') as Style) || 'classic');
+  const [domain, setDomain] = useState<string | null>(null);
+  const [qrSource, setQrSource] = useState<'default' | 'domain'>(
+    () => ((localStorage.getItem('qm-qr-source') as 'default' | 'domain') || 'default'),
+  );
   const gridRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    staggerCards(gridRef.current);
+    const mm = staggerCards(gridRef.current);
+    return () => mm?.revert();
   }, [count]);
+
+  // الدومين المخصص الموثق (MKT-02) — بلا صلاحية settings تبقى الطاولات بالنطاق الحالي بصمت
+  useEffect(() => {
+    api<{ custom_domain: string | null; domain_status: string | null }>('/api/shop/settings')
+      .then((s) => {
+        if (s.custom_domain && s.domain_status === 'verified') setDomain(s.custom_domain);
+        else {
+          setDomain(null);
+          if (qrSource === 'domain') setQrSource('default');
+        }
+      })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
   const [dl, setDl] = useState<number | null>(null);
 
   useEffect(() => {
     if (!shop) return;
-    const origin = window.location.origin;
+    const base = qrSource === 'domain' && domain ? `https://${domain}` : window.location.origin;
     const gen: Record<number, string> = {};
     (async () => {
       for (let i = 1; i <= count; i++) {
-        gen[i] = await QRCode.toDataURL(`${origin}/${shop.slug}/t/${i}`, { width: 320, margin: 1.5, color: { dark: '#134e4a' } });
+        gen[i] = await QRCode.toDataURL(`${base}/${shop.slug}/t/${i}`, { width: 320, margin: 1.5, color: { dark: '#134e4a' } });
       }
       setQrUrls(gen);
     })();
-  }, [shop, count]);
+  }, [shop, count, qrSource, domain]);
 
   useEffect(() => {
     localStorage.setItem('qm-qr-style', style);
   }, [style]);
+
+  useEffect(() => {
+    localStorage.setItem('qm-qr-source', qrSource);
+  }, [qrSource]);
 
   const save = async () => {
     setBusy(true);
@@ -208,6 +231,15 @@ export default function DashTables() {
                 <option value="minimal">{t('qrMinimal')}</option>
               </Select>
             </Field>
+            {domain && (
+              <Field label={t('qrSourceLabel')}>
+                <Select value={qrSource} onChange={(e) => setQrSource(e.target.value as 'default' | 'domain')}>
+                  <option value="default">{t('qrSourceDefault')}</option>
+                  <option value="domain">{domain}</option>
+                </Select>
+                {qrSource === 'domain' && <p className="mt-1.5 text-xs font-bold text-amber-600">⚠️ {t('qrSourceWarn')}</p>}
+              </Field>
+            )}
           </div>
           <Btn onClick={save} disabled={busy || count === shop.table_count}>{t('save')}</Btn>
           {saved && <Ok>{t('saved')}</Ok>}

@@ -44,11 +44,15 @@ export default function DiscountsCard() {
 
   useEffect(() => {
     load();
-    fadeInUp(cardRef.current);
+    const mm = fadeInUp(cardRef.current);
+    return () => mm?.revert();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
-    if (list?.length) staggerCards(listRef.current);
+    if (!list?.length) return;
+    const mm = staggerCards(listRef.current);
+    return () => mm?.revert();
   }, [list]);
 
   const create = async () => {

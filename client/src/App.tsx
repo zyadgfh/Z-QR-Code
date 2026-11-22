@@ -1,5 +1,6 @@
-import { Suspense, lazy } from 'react';
+import { Suspense, lazy, useEffect } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
+import { api } from './lib/api';
 import CustomerMenu from './pages/customer/CustomerMenu';
 // الشاشات الثقيلة تُحمَّل كسولًا (D8) — تقسيم الحزمة وتسريع الإقلاع
 const DashMenu = lazy(() => import('./pages/dash/DashMenu'));
@@ -17,6 +18,16 @@ import DashOrders from './pages/dash/DashOrders';
 import LegalPage from './pages/LegalPage';
 
 export default function App() {
+  // الدومين المخصص (MKT-02): الزبون يمسح QR على cafe.example.com فيصل للجذر —
+  // نحسم المحل من Host عبر /api/public/resolve ونوجه لمنيوه فورًا. الجذر عادي → تسجيل الدخول كما هو.
+  useEffect(() => {
+    if (window.location.pathname !== '/') return;
+    api<{ slug: string }>('/api/public/resolve')
+      .then((r) => {
+        if (r?.slug) window.location.replace(`/${r.slug}`);
+      })
+      .catch(() => {});
+  }, []);
   return (
     <Suspense
       fallback={

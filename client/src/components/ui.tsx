@@ -112,7 +112,9 @@ export function Modal({
   const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    if (open) sheetIn(panelRef.current);
+    if (!open) return;
+    const mm = sheetIn(panelRef.current);
+    return () => mm?.revert();
   }, [open]);
 
   if (!open) return null;
@@ -170,7 +172,8 @@ export function Err({ error }: { error: unknown }) {
   useEffect(() => {
     const m = error instanceof Error ? error.message : String(error);
     setMsg(m);
-    if (m) shake(ref.current);
+    const mm = m ? shake(ref.current) : null;
+    return () => mm?.revert();
   }, [error]);
   if (!msg) return null;
   return <div ref={ref} className="rounded-2xl bg-red-50 px-3.5 py-2.5 text-sm font-bold text-red-700">{msg}</div>;
@@ -248,7 +251,8 @@ export function Toaster() {
   const dismiss = useToasts((s) => s.dismiss);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (ref.current) popIn(ref.current);
+    const mm = popIn(ref.current);
+    return () => mm?.revert();
   }, [items.length]);
   if (items.length === 0) return null;
   return (

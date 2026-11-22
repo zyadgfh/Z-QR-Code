@@ -10,6 +10,7 @@ import DiscountsCard from '../../components/DiscountsCard';
 import BackupCard from '../../components/BackupCard';
 import TaxCard from '../../components/TaxCard';
 import ReceiptCard from '../../components/ReceiptCard';
+import DomainCard from '../../components/DomainCard';
 import AuditCard from '../../components/AuditCard';
 import BranchesCard from '../../components/BranchesCard';
 import LoyaltyCard from '../../components/LoyaltyCard';
@@ -78,7 +79,9 @@ export default function DashSettings() {
   }, []);
 
   useEffect(() => {
-    if (summary) staggerCards(wrapRef.current);
+    if (!summary) return;
+    const mm = staggerCards(wrapRef.current);
+    return () => mm?.revert();
   }, [summary]);
 
   if (!summary) return <Spinner label={t('loading')} />;
@@ -314,6 +317,7 @@ export default function DashSettings() {
       <LoyaltyCard />
       <TaxCard />
       <ReceiptCard />
+      <DomainCard />
       <BackupCard />
       <AuditCard />
       <ChangePasswordCard />

@@ -30,6 +30,9 @@ export default function DashAnalytics() {
   const [data, setData] = useState<Analytics | null>(null);
   const [error, setError] = useState<string | null>(null);
   const rootRef = useRef<HTMLDivElement>(null);
+  const animTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastMM = useRef<{ revert: () => void } | null>(null);
+  useEffect(() => () => { if (animTimer.current) clearTimeout(animTimer.current); lastMM.current?.revert(); }, []);
 
   useEffect(() => {
     setData(null);
@@ -37,7 +40,7 @@ export default function DashAnalytics() {
     api<Analytics>(`/api/shop/analytics?days=${days}`)
       .then((d) => {
         setData(d);
-        setTimeout(() => staggerCards(rootRef.current), 30);
+        animTimer.current = setTimeout(() => { lastMM.current = staggerCards(rootRef.current); }, 30);
       })
       .catch((e) => setError(e.message));
   }, [days]);
