@@ -249,6 +249,22 @@ module.exports = function shopRoutes(ctx) {
     })
   );
 
+  // ---------- ترجمة المنيو AI (A-01): اقتراح للمراجعة — بلا كتابة في القاعدة ----------
+  r.post(
+    '/menu/translate',
+    h(async (req, res) => {
+      ownerOnly(req);
+      const full = await menuService.listFull(db, req.member.shop_id);
+      const proposal = await aiService.translateMenu({
+        items: full.items,
+        categories: full.categories,
+        apiKey: env.GEMINI_API_KEY,
+        model: env.GEMINI_MODEL || aiService.DEFAULT_MODEL,
+      });
+      res.json(proposal);
+    })
+  );
+
   // ---------- الموظفين (مالك فقط) ----------
   r.get(
     '/staff',

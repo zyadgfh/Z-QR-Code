@@ -3,7 +3,7 @@ import { api } from '../../lib/api';
 import { dashT } from '../../lib/i18n';
 import { useDashLang } from '../../stores/dashlang';
 import { compressImage } from '../../lib/img';
-import { Btn, Chip, Err, Field, Input, Label, Modal, Select, Spinner } from '../../components/ui';
+import { Btn, Chip, Err, Field, Input, Label, Modal, Ok, Select, Spinner } from '../../components/ui';
 
 type Opt = { id: string; name: string; name_en: string | null; price_delta: number };
 type Group = { id: string; name: string; name_en: string | null; selection: 'single' | 'multi'; required: boolean; options: Opt[] };
@@ -13,9 +13,14 @@ type Item = {
   name: string;
   name_en: string | null;
   description: string | null;
+  description_en?: string | null;
   price: number;
   photo_url: string | null;
   available: boolean;
+  sold_out?: boolean;
+  allergens?: string[] | null;
+  calories?: number | null;
+  weight_g?: number | null;
   groups: Group[];
 };
 type MenuData = { categories: { id: string; name: string; name_en: string | null; sort_order: number }[]; items: Item[] };
@@ -28,6 +33,7 @@ export default function DashMenu() {
   const [selCat, setSelCat] = useState<string | null>(null);
   const [editing, setEditing] = useState<{ item: Item | null; open: boolean }>({ item: null, open: false });
   const [aiOpen, setAiOpen] = useState(false);
+  const [trOpen, setTrOpen] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -76,6 +82,7 @@ export default function DashMenu() {
       <div className="flex flex-wrap items-center gap-2">
         <Btn onClick={() => setEditing({ item: null, open: true })} disabled={!selCat}>＋ {t('addItem')}</Btn>
         <Btn variant="soft" onClick={() => setAiOpen(true)}>✨ {t('aiImport')}</Btn>
+        <Btn variant="soft" onClick={() => setTrOpen(true)}>🌐 {t('translate')}</Btn>
         <Btn variant="ghost" onClick={addCategory}>＋ {t('addCategory')}</Btn>
       </div>
 
@@ -115,10 +122,24 @@ export default function DashMenu() {
                 <p className="flex items-center gap-2 truncate font-extrabold text-stone-800">
                   {it.name}
                   {!it.available && <Chip color="red">{t('hidden')}</Chip>}
+                  {it.available && it.sold_out && <Chip color="amber">{t('soldOut')}</Chip>}
                 </p>
                 {it.name_en && <p className="truncate text-xs text-stone-400" dir="ltr">{it.name_en}</p>}
                 <p className="text-sm font-extrabold text-teal-700">{it.price} {lang === 'ar' ? 'ج.م' : 'EGP'}</p>
               </div>
+              <Btn
+                variant="ghost"
+                onClick={async () => {
+                  try {
+                    await api(`/api/shop/items/${it.id}`, { method: 'PUT', body: { name: it.name, price: it.price, sold_out: !it.sold_out } });
+                    await load();
+                  } catch (e: any) {
+                    alert(e.message);
+                  }
+                }}
+              >
+                {it.sold_out ? '✅' : '🚫'}
+              </Btn>
               <Btn variant="ghost" onClick={() => setEditing({ item: it, open: true })}>✏️</Btn>
             </div>
           ))}
@@ -134,6 +155,7 @@ export default function DashMenu() {
         />
       )}
       {aiOpen && <AiImportModal onClose={() => setAiOpen(false)} onPublished={load} />}
+      {trOpen && <TranslateModal onClose={() => setTrOpen(false)} onApplied={load} />}
     </div>
   );
 }
@@ -148,8 +170,13 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
   const [name, setName] = useState(item?.name || '');
   const [nameEn, setNameEn] = useState(item?.name_en || '');
   const [desc, setDesc] = useState(item?.description || '');
+  const [descEn, setDescEn] = useState(item?.description_en || '');
   const [price, setPrice] = useState(item?.price ?? 0);
   const [available, setAvailable] = useState(item?.available !== false);
+  const [soldOut, setSoldOut] = useState(item?.sold_out === true);
+  const [allergensText, setAllergensText] = useState((item?.allergens || []).join('، '));
+  const [calories, setCalories] = useState(item?.calories ?? '');
+  const [weightG, setWeightG] = useState(item?.weight_g ?? '');
   const [photoUrl, setPhotoUrl] = useState(item?.photo_url || '');
   const [uploading, setUploading] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -177,18 +204,31 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
 
   const saveItem = async (): Promise<string | null> => {
     setError(null);
+    const allergens = allergensText
+      .split(/[,،]/)
+      .map((s) => s.trim())
+      .filter(Boolean)
+      .slice(0, 8);
+    const body = {
+      category_id: categoryId,
+      name,
+      name_en: nameEn || null,
+      description: desc || null,
+      description_en: descEn || null,
+      price,
+      available,
+      sold_out: soldOut,
+      allergens,
+      calories: calories === '' ? null : Number(calories),
+      weight_g: weightG === '' ? null : Number(weightG),
+      photo_url: photoUrl || null,
+    };
     try {
       if (itemId) {
-        await api(`/api/shop/items/${itemId}`, {
-          method: 'PUT',
-          body: { category_id: categoryId, name, name_en: nameEn || null, description: desc || null, price, available, photo_url: photoUrl || null },
-        });
+        await api(`/api/shop/items/${itemId}`, { method: 'PUT', body });
         return itemId;
       }
-      const created = await api<{ id: string }>('/api/shop/items', {
-        method: 'POST',
-        body: { category_id: categoryId, name, name_en: nameEn || null, description: desc || null, price, available, photo_url: photoUrl || null },
-      });
+      const created = await api<{ id: string }>('/api/shop/items', { method: 'POST', body });
       setSavedId(created.id);
       return created.id;
     } catch (e: any) {
@@ -271,7 +311,29 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
             </button>
           </Field>
         </div>
+        {/* نفد اليوم: يظهر معتيمًا للزبون ويُرفض من الخادم — بلا حذف */}
+        <button
+          onClick={() => setSoldOut((v) => !v)}
+          className={`w-full rounded-xl px-3 py-2 text-sm font-extrabold transition ${
+            soldOut ? 'bg-orange-100 text-orange-700 border border-orange-300' : 'bg-stone-100 text-stone-500 border border-stone-200 hover:bg-stone-200'
+          }`}
+        >
+          {soldOut ? `🚫 ${t('markSoldOut')} — اضغط للإلغاء` : `🍽 ${t('markAvailable')}`}
+        </button>
         <Field label={t('description')}><Input value={desc} onChange={(e) => setDesc(e.target.value)} /></Field>
+        <Field label={t('descEn')}><Input dir="ltr" value={descEn} onChange={(e) => setDescEn(e.target.value)} /></Field>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Field label={t('allergens')}>
+            <Input value={allergensText} onChange={(e) => setAllergensText(e.target.value)} placeholder="مكسرات، جلوتين…" />
+          </Field>
+          <Field label={t('calories')}>
+            <Input type="number" min={0} value={calories} onChange={(e) => setCalories(e.target.value)} />
+          </Field>
+          <Field label={t('weightG')}>
+            <Input type="number" min={0} value={weightG} onChange={(e) => setWeightG(e.target.value)} />
+          </Field>
+        </div>
+        <p className="text-xs text-stone-400">{t('allergensHint')}</p>
         <div className="flex items-end gap-3">
           {photoUrl && <img src={photoUrl} alt="" className="h-16 w-16 rounded-2xl object-cover" />}
           <label className="cursor-pointer rounded-xl border border-stone-300 px-3 py-2 text-sm font-bold text-stone-600 hover:bg-stone-50">
@@ -481,6 +543,100 @@ function AiImportModal({ onClose, onPublished }: { onClose: () => void; onPublis
       {phase === 'publishing' && (
         <div className="py-8 text-center">
           <Spinner label={`${t('aiPublishing')} ${progress}`} />
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+// ================= ترجمة المنيو AI (A-01): اقتراح → مراجعة → اعتماد =================
+
+type TranslateProposal = {
+  categories: { id: string; name_en: string }[];
+  items: { id: string; name_en: string; description_en: string | null }[];
+};
+
+function TranslateModal({ onClose, onApplied }: { onClose: () => void; onApplied: () => Promise<void> }) {
+  const { lang } = useDashLang();
+  const t = dashT(lang);
+  const [proposal, setProposal] = useState<TranslateProposal | null>(null);
+  const [busy, setBusy] = useState(true);
+  const [applying, setApplying] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+
+  const run = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      setProposal(await api<TranslateProposal>('/api/shop/menu/translate', { method: 'POST' }));
+    } catch (e: any) {
+      setError(e.message);
+    }
+    setBusy(false);
+  };
+
+  useEffect(() => {
+    run();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const apply = async () => {
+    if (!proposal) return;
+    setApplying(true);
+    setError(null);
+    try {
+      const d = await api<MenuData>('/api/shop/menu');
+      const catById = new Map(d.categories.map((c) => [c.id, c]));
+      const itemById = new Map(d.items.map((i) => [i.id, i]));
+      for (const p of proposal.categories) {
+        const c = catById.get(p.id);
+        if (!c) continue;
+        await api(`/api/shop/categories/${p.id}`, { method: 'PUT', body: { name: c.name, name_en: p.name_en } });
+      }
+      for (const p of proposal.items) {
+        const i = itemById.get(p.id);
+        if (!i) continue;
+        await api(`/api/shop/items/${p.id}`, {
+          method: 'PUT',
+          body: { name: i.name, price: i.price, name_en: p.name_en, description_en: p.description_en },
+        });
+      }
+      setDone(true);
+      await onApplied();
+      setTimeout(onClose, 900);
+    } catch (e: any) {
+      setError(e.message);
+    }
+    setApplying(false);
+  };
+
+  return (
+    <Modal open onClose={onClose} title={`🌐 ${busy ? t('translating') : t('translate')}`} wide>
+      {busy && <Spinner label={t('translating')} />}
+      {!busy && error && !proposal && <div className="space-y-3"><Err error={error} /><Btn onClick={run}>↻</Btn></div>}
+      {proposal && (
+        <div className="space-y-3">
+          <p className="rounded-xl bg-teal-50 px-3 py-2 text-xs font-bold text-teal-800">{t('translateHint')}</p>
+          <div className="max-h-72 space-y-1.5 overflow-y-auto">
+            {proposal.items.map((p) => (
+              <div key={p.id} className="rounded-2xl border border-stone-200 px-3 py-2">
+                <p className="text-sm font-extrabold text-stone-800" dir="ltr">{p.name_en}</p>
+                {p.description_en && <p className="text-xs text-stone-500" dir="ltr">{p.description_en}</p>}
+              </div>
+            ))}
+            {proposal.categories.map((p) => (
+              <div key={p.id} className="rounded-2xl bg-stone-50 px-3 py-2 text-sm font-bold text-stone-600" dir="ltr">
+                ▸ {p.name_en}
+              </div>
+            ))}
+          </div>
+          {done && <Ok>{t('applied')}</Ok>}
+          {error && <Err error={error} />}
+          <div className="flex justify-end gap-2">
+            <Btn variant="ghost" onClick={onClose}>✕</Btn>
+            <Btn onClick={apply} disabled={applying || done}>{applying ? '…' : t('applyAll')}</Btn>
+          </div>
         </div>
       )}
     </Modal>

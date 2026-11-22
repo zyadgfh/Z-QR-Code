@@ -3,7 +3,7 @@
 const crypto = require('crypto');
 
 const { HttpError } = require('../lib/errors');
-const { asStr, asMoney, asBool } = require('../lib/validate');
+const { asStr, asMoney, asBool, asInt } = require('../lib/validate');
 
 /** جلب مستند ينتمي للمحل — 404 إن لم يوجد أو لا يخص هذا المحل (لا نكشف الوجود) */
 async function mustOwn(db, col, id, shopId) {
@@ -66,14 +66,37 @@ function itemFields(body) {
   if (price === null) throw new HttpError(400, 'INVALID_PRICE', 'السعر غير صحيح');
   const description = body.description === undefined ? undefined : asStr(body.description, { max: 300 });
   const name_en = body.name_en === undefined ? undefined : asStr(body.name_en, { max: 100 });
+  const description_en = body.description_en === undefined ? undefined : asStr(body.description_en, { max: 300 });
   const photo_url = body.photo_url === undefined ? undefined : asStr(body.photo_url, { max: 500 });
+  // مسببات الحساسية: قائمة نصوص قصيرة اختيارية
+  let allergens;
+  if (body.allergens !== undefined) {
+    if (body.allergens === null) allergens = [];
+    else if (!Array.isArray(body.allergens) || body.allergens.length > 8) throw new HttpError(400, 'INVALID_ALLERGENS', 'مسببات الحساسية: قائمة حتى 8 عناصر');
+    allergens = body.allergens.map((a) => asStr(a, { max: 30 })).filter(Boolean);
+  }
+  let calories;
+  if (body.calories !== undefined && body.calories !== null) {
+    calories = asInt(body.calories, { min: 0, max: 10000 });
+    if (calories === null || calories === undefined) throw new HttpError(400, 'INVALID_CALORIES', 'السعرات غير صحيحة');
+  }
+  let weight_g;
+  if (body.weight_g !== undefined && body.weight_g !== null) {
+    weight_g = asInt(body.weight_g, { min: 0, max: 10000 });
+    if (weight_g === null || weight_g === undefined) throw new HttpError(400, 'INVALID_WEIGHT', 'الوزن غير صحيح');
+  }
   return {
     name,
     price,
     description: description === undefined ? undefined : description || null,
     name_en: name_en === undefined ? undefined : name_en || null,
+    description_en: description_en === undefined ? undefined : description_en || null,
     photo_url: photo_url === undefined ? undefined : photo_url || null,
     available: body.available === undefined ? true : asBool(body.available),
+    sold_out: body.sold_out === undefined ? undefined : asBool(body.sold_out),
+    allergens: allergens === undefined ? undefined : allergens,
+    calories: calories === undefined ? undefined : calories,
+    weight_g: weight_g === undefined ? undefined : weight_g,
   };
 }
 
@@ -227,9 +250,14 @@ async function listFull(db, shopId) {
       name: i.name,
       name_en: i.name_en,
       description: i.description,
+      description_en: i.description_en ?? null,
       price: i.price,
       photo_url: i.photo_url,
       available: i.available !== false,
+      sold_out: i.sold_out === true,
+      allergens: i.allergens || [],
+      calories: i.calories ?? null,
+      weight_g: i.weight_g ?? null,
       groups: groupsByItem.get(i.id) || [],
     })),
   };
@@ -241,22 +269,28 @@ async function publicMenu(db, slug) {
   const shop = await shops.findBySlug(db, slug);
   if (!shop) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
   const shopStatus = shops.statusOf(shop);
-  const open = shopStatus !== 'locked';
-  if (!open) {
+  if (shopStatus === 'locked') {
     return { open: false, reason: shopStatus, shop: { slug: shop.slug, name: shop.name, logo_url: shop.logo_url } };
   }
+  // مواعيد العمل (F-05): خارج الدوام → منيو يظهر لكن الطلبات مغلقة
+  const openNow = shops.isOpenNow(shop);
   const full = await listFull(db, shop.id);
   return {
-    open: true,
+    open: openNow,
+    reason: openNow ? undefined : 'closed_hours',
     shop: {
       slug: shop.slug,
       name: shop.name,
       menu_language: shop.menu_language,
       logo_url: shop.logo_url,
       table_count: shop.table_count,
+      theme: shop.theme || null,
+      brand_color: shop.brand_color || null,
+      hours: shop.hours || null,
     },
     categories: full.categories,
-    items: full.items.filter((i) => i.available).map((i) => ({ ...i, available: undefined })),
+    // النافد اليوم يظهر معتيمًا (sold_out) والمخفي نهائيًا يختفي (available=false)
+    items: full.items.filter((i) => i.available !== false).map((i) => ({ ...i })),
   };
 }
 

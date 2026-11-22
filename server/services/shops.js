@@ -18,7 +18,6 @@ function statusOf(shop, now = Date.now()) {
 function isOpen(shop, now = Date.now()) {
   return statusOf(shop, now) !== 'locked';
 }
-
 /** أيام متبقية حتى نهاية الفترة الحالية (تجربة أو اشتراك) */
 function daysLeft(shop, now = Date.now()) {
   const end = shop.paid_until && now < shop.paid_until ? shop.paid_until : shop.trial_ends_at;
@@ -126,7 +125,68 @@ async function updateSettings(db, shopId, patch) {
   if (patch.logo_url !== undefined) {
     out.logo_url = patch.logo_url === null ? null : asStr(patch.logo_url, { max: 500 });
   }
+  // مواعيد العمل الأسبوعية (F-05): مصفوفة 7 عناصر (0=الأحد) — كل عنصر null (مغلق) أو {open,close}
+  if (patch.hours !== undefined) {
+    if (patch.hours === null) {
+      out.hours = null;
+    } else if (!Array.isArray(patch.hours) || patch.hours.length !== 7) {
+      throw new HttpError(400, 'INVALID_HOURS', 'مواعيد العمل: مصفوفة من 7 أيام');
+    } else {
+      const days = patch.hours.map((d) => {
+        if (d === null || d === undefined) return null;
+        if (typeof d !== 'object' || !/^\d{2}:\d{2}$/.test(String(d.open)) || !/^\d{2}:\d{2}$/.test(String(d.close)))
+          throw new HttpError(400, 'INVALID_HOURS', 'صيغة الوقت يجب أن تكون HH:MM');
+        return { open: String(d.open), close: String(d.close) };
+      });
+      out.hours = days;
+    }
+  }
+  // ثيم المنيو (MKT-03)
+  if (patch.theme !== undefined) {
+    if (patch.theme === null || patch.theme === '') out.theme = null;
+    else if (!['dark', 'neon', 'sunset', 'mono'].includes(patch.theme))
+      throw new HttpError(400, 'INVALID_THEME', 'ثيم غير معروف');
+    else out.theme = patch.theme;
+  }
+  // لون الهوية للـ QR والثيمات
+  if (patch.brand_color !== undefined) {
+    if (patch.brand_color === null || patch.brand_color === '') out.brand_color = null;
+    else if (!/^#[0-9a-fA-F]{6}$/.test(String(patch.brand_color)))
+      throw new HttpError(400, 'INVALID_COLOR', 'لون الهوية يجب أن يكون بصيغة #RRGGBB');
+    else out.brand_color = patch.brand_color.toLowerCase();
+  }
   return db.update('shops', shopId, out);
+}
+
+/**
+ * هل المحل مفتوح الآن حسب مواعيد العمل الأسبوعية؟ (F-05)
+ * hours = مصفوفة 7 (0=الأحد) من null (مغلق) أو {open:"HH:MM", close:"HH:MM"}.
+ * بلا hours → مفتوح دائمًا. نافذة تعبر منتصف الليل (close < open) مدعومة.
+ */
+function isOpenNow(shop, now = Date.now()) {
+  const hours = shop && shop.hours;
+  if (!Array.isArray(hours) || hours.length !== 7) return true;
+  const d = new Date(now);
+  const toMin = (s) => {
+    const m = /^(\d{1,2}):(\d{2})$/.exec(String(s));
+    return m ? Number(m[1]) * 60 + Number(m[2]) : null;
+  };
+  // نافذة اليوم: إن كانت تعبر منتصف الليل (open>close) فالبداية تكفي اليوم
+  // ونافذة الأمس العابرة لمنتصف الليل تغطي ساعات الصباح الباكر
+  const inWin = (e, cur, part) => {
+    const openM = toMin(e.open);
+    const closeM = toMin(e.close);
+    if (openM === null || closeM === null) return true; // قيمة تالفة → فتح بأمان
+    if (openM === closeM) return true; // 24 ساعة
+    if (openM < closeM) return cur >= openM && cur < closeM;
+    return part === 'start' ? cur >= openM : cur < closeM;
+  };
+  const cur = d.getHours() * 60 + d.getMinutes();
+  const today = hours[d.getDay()];
+  const yest = hours[(d.getDay() + 6) % 7];
+  if (today && inWin(today, cur, 'start')) return true;
+  if (yest && inWin(yest, cur, 'end')) return true;
+  return false;
 }
 
 // ---------- حسابات الموظفين (المالك فقط) ----------
@@ -185,6 +245,7 @@ module.exports = {
   MENU_LANGS,
   statusOf,
   isOpen,
+  isOpenNow,
   daysLeft,
   byId,
   findBySlug,
