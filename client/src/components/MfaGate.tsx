@@ -40,7 +40,9 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
   };
 
   useEffect(() => {
-    if (variant === 'card') start();
+    // البوابة الإلزامية (SEC-03/Q7) تبدأ الإعداد تلقائيًا — كان يبدأ فقط في وضع البطاقة
+    // فعلِقت بوابة الإنتاج على «…» بلا زر (أُكتشف في أول دخول إنتاجي فعلي).
+    start();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -129,13 +131,15 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
             </Btn>
           </div>
         )}
-        {!qr && error && <div className="mt-3"><Err error={error} /></div>}
-        {!qr && !error && variant === 'gate' && <p className="mt-4 text-sm text-stone-400">…</p>}
-        {!setup && variant === 'card' && (
-          <Btn onClick={start} disabled={busy} className="mt-3 w-full">
-            {t('mfaEnable')}
-          </Btn>
+        {!qr && error && (
+          <div className="mt-3">
+            <Err error={error} />
+            <Btn onClick={start} disabled={busy} className="mt-3 w-full">
+              {t('mfaEnable')}
+            </Btn>
+          </div>
         )}
+        {!qr && !error && variant === 'gate' && <p className="mt-4 text-sm text-stone-400">{busy ? '…' : ''}</p>}
       </div>
     </div>
   );
