@@ -14,6 +14,7 @@ const { parseDataUrl } = require('../services/ai');
 const discountsService = require('../services/discounts');
 const branchesService = require('../services/branches');
 const loyaltyService = require('../services/loyalty');
+const analyticsService = require('../services/analytics');
 const { ordersCsv } = require('../lib/csv');
 
 module.exports = function shopRoutes(ctx) {
@@ -290,6 +291,22 @@ module.exports = function shopRoutes(ctx) {
       res.json(proposal);
     })
   );
+
+  // ---------- التحليلات (D6) — مالك فقط (بيانات مالية وتشغيلية) ----------
+  r.get('/analytics', h(async (req, res) => {
+    ownerOnly(req);
+    res.json(await analyticsService.shopAnalytics(db, req.member.shop_id, req.query.days));
+  }));
+
+  // ---------- نسخة احتياطية JSON (D6) — مالك فقط ----------
+  r.get('/export', h(async (req, res) => {
+    ownerOnly(req);
+    const data = await shopsService.exportShop(db, req.member.shop_id);
+    const d = new Date();
+    const stamp = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`;
+    res.set('content-disposition', `attachment; filename="shop-${data.shop.slug || 'export'}-${stamp}.json"`);
+    res.json(data);
+  }));
 
   // ---------- أكواد الخصم (F-06) — مالك فقط ----------
   r.get('/discounts', h(async (req, res) => {

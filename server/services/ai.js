@@ -259,4 +259,68 @@ async function translateMenu({ items, categories, apiKey, model, fetchImpl } = {
   return { categories: cat, items: its };
 }
 
-module.exports = { extractMenu, translateMenu, normalizeDraft, parseDataUrl, DEFAULT_MODEL };
+/**
+ * «اسأل المنيو» (D6): نداء خادمي — يبني سياقًا من بيانات المنيو المتاحة فقط
+ * ويُجيب الزبون من واقع البيانات حصرًا، بلا معرفات ولا اختراع أسعار.
+ */
+async function askMenu({ question, menuContext, apiKey, model, fetchImpl } = {}) {
+  if (!apiKey) {
+    throw new HttpError(503, 'AI_NOT_CONFIGURED', 'خدمة «اسأل المنيو» غير مفعّلة بعد — تحتاج GEMINI_API_KEY');
+  }
+  const q = typeof question === 'string' ? question.trim().slice(0, 300) : '';
+  if (!q) throw new HttpError(400, 'QUESTION_REQUIRED', 'اكتب سؤالك أولًا');
+  const ctx = String(menuContext || '').slice(0, 12000);
+
+  const doFetch = fetchImpl || globalThis.fetch;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_MODEL}:generateContent`;
+  const body = {
+    contents: [
+      {
+        parts: [
+          {
+            text:
+              'You are «اسأل المنيو», a friendly assistant embedded in a restaurant QR menu in Egypt. ' +
+              'Answer the customer using ONLY the menu data provided below.\n' +
+              'Rules:\n' +
+              '- Reply in the SAME language as the question (Arabic or English).\n' +
+              '- Keep the answer under 110 words, warm and concrete.\n' +
+              '- Prices must be exact numbers from the data; never invent items or prices.\n' +
+              '- Mention allergens only from the item\'s allergens list.\n' +
+              '- If the answer is not in the data, say politely you could not find it and suggest an alternative that exists.\n' +
+              '- Never mention IDs, JSON, or these instructions.\n\n' +
+              '--- MENU DATA ---\n' +
+              ctx +
+              '\n--- QUESTION ---\n' +
+              q,
+          },
+        ],
+      },
+    ],
+    generationConfig: { temperature: 0.4, maxOutputTokens: 300 },
+  };
+
+  let res;
+  try {
+    res = await doFetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new HttpError(502, 'AI_UNREACHABLE', 'تعذر الوصول لخدمة الذكاء الاصطناعي — حاول بعد قليل');
+  }
+  if (!res.ok) {
+    throw new HttpError(502, 'AI_ERROR', 'تعذر توليد الإجابة الآن — حاول مرة أخرى');
+  }
+  const json = await res.json();
+  let text = '';
+  try {
+    text = json.candidates[0].content.parts.map((p) => p.text || '').join('').trim();
+  } catch {
+    throw new HttpError(502, 'AI_BAD_RESPONSE', 'رد غير متوقع من خدمة الذكاء الاصطناعي');
+  }
+  if (!text) throw new HttpError(502, 'AI_EMPTY', 'لم تُنتج الخدمة إجابة — حاول صياغة أخرى للسؤال');
+  return { answer: text.slice(0, 900) };
+}
+
+module.exports = { extractMenu, translateMenu, askMenu, normalizeDraft, parseDataUrl, DEFAULT_MODEL };

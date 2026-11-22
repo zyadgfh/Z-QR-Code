@@ -6,6 +6,7 @@ const { rateLimit } = require('../lib/ratelimit');
 const { sendWithEtag } = require('../lib/etag');
 const menuService = require('../services/menu');
 const ordersService = require('../services/orders');
+const aiService = require('../services/ai');
 
 module.exports = function publicRoutes(ctx) {
   const { db, env, notifier } = ctx;
@@ -53,6 +54,43 @@ module.exports = function publicRoutes(ctx) {
     rateLimit({ windowMs: 60000, max: 10, keyFn: (req) => 'ophone:' + (req.ip || 'x') }),
     h(async (req, res) => {
       res.json(await ordersService.setPhone(db, req.params.id, req.body?.phone));
+    })
+  );
+
+  // تقييم الطلب (D6) — نجوم 1..5 وتعليق، مرة واحدة لكل طلب
+  r.post(
+    '/orders/:id/rating',
+    rateLimit({ windowMs: 60000, max: 10, keyFn: (req) => 'rate:' + (req.ip || 'x') }),
+    h(async (req, res) => {
+      res.json(await ordersService.rateOrder(db, req.params.id, req.body || {}));
+    })
+  );
+
+  // «اسأل المنيو» (D6) — Gemini خادمي على بيانات المنيو المتاحة فقط، محدود المعدل
+  r.post(
+    '/shops/:slug/ask',
+    rateLimit({ windowMs: 60000, max: 10, keyFn: (req) => 'ask:' + (req.ip || 'x') + ':' + req.params.slug }),
+    h(async (req, res) => {
+      const menu = await menuService.publicMenu(db, req.params.slug);
+      const catName = new Map((menu.categories || []).map((c) => [c.id, c.name]));
+      const lines = (menu.items || [])
+        .filter((i) => i.available !== false)
+        .slice(0, 150)
+        .map((i) => {
+          let line = `- ${i.name}${i.name_en ? ` (${i.name_en})` : ''} | ${catName.get(i.category_id) || ''} | price ${i.price}`;
+          if (i.description) line += ` | desc: ${String(i.description).slice(0, 100)}`;
+          if (Array.isArray(i.allergens) && i.allergens.length) line += ` | allergens: ${i.allergens.join(', ')}`;
+          if (i.sold_out) line += ' | SOLD OUT today';
+          return line;
+        })
+        .join('\n');
+      const out = await aiService.askMenu({
+        question: req.body && req.body.question,
+        menuContext: lines,
+        apiKey: env.GEMINI_API_KEY,
+        model: env.GEMINI_MODEL || aiService.DEFAULT_MODEL,
+      });
+      res.json(out);
     })
   );
 

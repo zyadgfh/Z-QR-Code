@@ -16,6 +16,8 @@ type Status = {
   customer_phone: string | null;
   points_earned?: number;
   loyalty_discount: number;
+  tip: number;
+  rating: { stars: number; comment: string } | null;
   total: number;
   items: { name: string; name_en: string | null; qty: number; unit_price: number; options: { group_name: string; option_name: string; price_delta: number }[]; line_total: number }[];
   note: string;
@@ -32,6 +34,11 @@ export default function OrderStatus() {
   // تسجيل هاتف الزبون الجالس (F-17) لكسب النقاط
   const [regPhone, setRegPhone] = useState('');
   const [phoneSaved, setPhoneSaved] = useState(false);
+  // تقييم الطلب (D6) — مرة واحدة
+  const [stars, setStars] = useState(0);
+  const [comment, setComment] = useState('');
+  const [rateSent, setRateSent] = useState(false);
+  const [rateErr, setRateErr] = useState<string | null>(null);
 
   const checkRef = useRef<HTMLParagraphElement>(null);
   const busyRef = useRef<HTMLDivElement>(null);
@@ -158,6 +165,12 @@ export default function OrderStatus() {
               <span>− {money(lang, st.loyalty_discount)}</span>
             </div>
           )}
+          {st.tip > 0 && (
+            <div className="mt-2 flex justify-between text-sm font-bold text-stone-500">
+              <span>💖 {t('tipTitle')}</span>
+              <span>{money(lang, st.tip)}</span>
+            </div>
+          )}
           {st.total !== lineSum(st) && (
             <div className="mt-2 flex justify-between text-sm font-bold text-stone-500">
               <span>{t('subtotalRow')}</span>
@@ -208,6 +221,55 @@ export default function OrderStatus() {
         )}
         {phoneSaved && (
           <p className="mt-3 rounded-xl bg-teal-50 px-3 py-2 text-center text-xs font-black text-teal-800">✓ {t('phoneSaved')}</p>
+        )}
+
+        {/* تقييم الطلب (D6) — يظهر بعد قبول الطلب */}
+        {st.state === 'accepted' && !st.rating && !rateSent && (
+          <div className="mt-4 rounded-[22px] border border-black/[0.04] bg-white p-4 shadow-apple">
+            <p className="mb-2 text-sm font-extrabold text-stone-700">{t('rateTitle')}</p>
+            <div className="flex gap-1.5">
+              {[1, 2, 3, 4, 5].map((n) => (
+                <button
+                  key={n}
+                  onClick={() => setStars(n)}
+                  className={`text-2xl transition active:scale-90 ${n <= stars ? 'text-amber-400' : 'text-stone-200'}`}
+                  aria-label={`${n}★`}
+                >
+                  ★
+                </button>
+              ))}
+            </div>
+            <input
+              value={comment}
+              onChange={(e) => setComment(e.target.value.slice(0, 300))}
+              placeholder={t('rateComment')}
+              className="mt-2.5 w-full rounded-2xl border border-stone-200 p-2.5 text-sm outline-none focus:border-teal-600"
+            />
+            <div className="mt-2.5 flex items-center gap-2">
+              <button
+                onClick={async () => {
+                  if (!stars) return;
+                  setRateErr(null);
+                  try {
+                    await api(`/api/public/orders/${orderId}/rating`, { method: 'POST', body: { stars, comment: comment.trim() || undefined } });
+                    setRateSent(true);
+                  } catch (e: any) {
+                    setRateErr(e.message);
+                  }
+                }}
+                disabled={!stars}
+                className="rounded-2xl bg-teal-700 px-5 py-2 text-sm font-extrabold text-white transition active:scale-95 disabled:opacity-50"
+              >
+                {t('rateSend')}
+              </button>
+              {rateErr && <span className="text-xs font-bold text-red-600">{rateErr}</span>}
+            </div>
+          </div>
+        )}
+        {(rateSent || st.rating) && (
+          <p className="mt-3 rounded-xl bg-teal-50 px-3 py-2 text-center text-xs font-black text-teal-800">
+            ⭐ {t('rateThanks')}
+          </p>
         )}
       </div>
     </div>

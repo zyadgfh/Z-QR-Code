@@ -282,6 +282,36 @@ async function removeStaff(db, shopId, userId) {
   await db.delete('users', userId);
 }
 
+/** نسخة احتياطية JSON كاملة للمحل (D6) — مالك فقط؛ الاستعادة بقرار تعارض لاحقًا */
+async function exportShop(db, shopId) {
+  const shop = await db.get('shops', shopId);
+  if (!shop) throw new HttpError(404, 'NOT_FOUND', 'المحل غير موجود');
+  const [categories, items, option_groups, options, branches, discounts, orders, loyalty_accounts] = await Promise.all([
+    db.query('categories', [{ field: 'shop_id', value: shopId }]),
+    db.query('items', [{ field: 'shop_id', value: shopId }]),
+    db.query('option_groups', [{ field: 'shop_id', value: shopId }]),
+    db.query('options', [{ field: 'shop_id', value: shopId }]),
+    db.query('branches', [{ field: 'shop_id', value: shopId }]),
+    db.query('discounts', [{ field: 'shop_id', value: shopId }]),
+    db.query('orders', [{ field: 'shop_id', value: shopId }]),
+    db.query('loyalty_accounts', [{ field: 'shop_id', value: shopId }]),
+  ]);
+  orders.sort((a, b) => (b.created_at || 0) - (a.created_at || 0));
+  return {
+    schema: 'z-qr-code-export-1',
+    exported_at: Date.now(),
+    shop,
+    categories,
+    items,
+    option_groups,
+    options,
+    branches,
+    discounts,
+    orders: orders.slice(0, 2000),
+    loyalty_accounts,
+  };
+}
+
 module.exports = {
   TRIAL_DAYS,
   PAID_DAYS,
@@ -297,6 +327,6 @@ module.exports = {
   createShop,
   updateSettings,
   addStaff,
-  listStaff, setStaffPerms,
+  listStaff, setStaffPerms, exportShop,
   removeStaff,
 };

@@ -263,6 +263,16 @@ export default function CustomerMenu() {
       {/* شريط السلة العائم الزجاجي */}
       <CartBar slug={slug} table={table} lang={lang} onOpen={() => navigate(`/${slug}/cart${table ? `?t=${table}` : ''}`)} />
 
+      {/* اسأل المنيو (D6) — زر عائم + ورقة إجابة */}
+      {data?.open && <AskMenu slug={slug} lang={lang} />}
+      
+      {/* روابط قانونية (D6) */}
+      <div className="mt-10 flex justify-center gap-4 pb-2 text-[11px] font-bold text-stone-400" dir={dir}>
+        <Link to={`/privacy?lang=${lang}`}>{t('privacy')}</Link>
+        <span>·</span>
+        <Link to={`/terms?lang=${lang}`}>{t('terms')}</Link>
+      </div>
+
       {selected && (
         <ItemSheet
           item={selected}
@@ -498,5 +508,85 @@ function BranchChip({ slug, id, name, address }: { slug: string; id: string; nam
       <p className={`text-xs font-black ${active ? 'text-teal-800' : 'text-stone-600'}`}>🏢 {name}</p>
       {address && <p className="text-[10px] font-bold text-stone-400">{address}</p>}
     </button>
+  );
+}
+
+/** «اسأل المنيو» (D6): نداء خادمي بـ Gemini على بيانات هذا المحل حصرًا */
+function AskMenu({ slug, lang }: { slug: string; lang: Lang }) {
+  const t = custT(lang);
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState('');
+  const [answer, setAnswer] = useState('');
+  const [asking, setAsking] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const dir = lang === 'ar' ? 'rtl' : 'ltr';
+
+  useEffect(() => {
+    if (open) sheetIn(panelRef.current);
+  }, [open]);
+
+  const ask = async () => {
+    if (!q.trim() || asking) return;
+    setAsking(true);
+    setErr(null);
+    setAnswer('');
+    try {
+      const r = await api<{ answer: string }>(`/api/public/shops/${slug}/ask`, { method: 'POST', body: { question: q.trim() } });
+      setAnswer(r.answer);
+    } catch (e: any) {
+      setErr(e.message);
+    }
+    setAsking(false);
+  };
+
+  return (
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="glass-float fixed bottom-24 z-40 rounded-[22px] border border-white/60 px-4 py-2.5 text-sm font-extrabold text-stone-900 shadow-apple transition active:scale-95"
+        style={{ insetInlineStart: '1rem' }}
+      >
+        🤖 {t('askMenu')}
+      </button>
+
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-end bg-black/40 backdrop-blur-[2px] sm:items-center sm:justify-center" onClick={() => setOpen(false)}>
+          <div
+            ref={panelRef}
+            dir={dir}
+            onClick={(e) => e.stopPropagation()}
+            className="max-h-[80dvh] w-full overflow-y-auto rounded-t-[28px] bg-white p-5 shadow-apple sm:max-w-md sm:rounded-[28px]"
+          >
+            <div className="mb-1 flex items-center gap-2">
+              <span className="text-xl">🤖</span>
+              <h3 className="flex-1 text-base font-black text-stone-900">{t('askMenu')}</h3>
+              <button onClick={() => setOpen(false)} className="rounded-full bg-stone-100 px-2.5 py-1 text-xs font-black text-stone-500">✕</button>
+            </div>
+            <p className="mb-3 text-[11px] font-bold text-stone-400">{t('askNote')}</p>
+            <textarea
+              value={q}
+              onChange={(e) => setQ(e.target.value.slice(0, 300))}
+              placeholder={t('askPh')}
+              rows={2}
+              className="w-full resize-none rounded-2xl border border-stone-200 p-3 text-sm outline-none focus:border-teal-600"
+            />
+            <button
+              onClick={ask}
+              disabled={asking || !q.trim()}
+              className="mt-2 w-full rounded-2xl bg-teal-700 py-3 text-sm font-extrabold text-white transition active:scale-[0.98] disabled:opacity-60"
+            >
+              {asking ? t('askThinking') : t('askSend')}
+            </button>
+            {err && <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{err}</p>}
+            {answer && (
+              <div className="mt-3 rounded-2xl bg-[#f5f5f7] p-4">
+                <p className="whitespace-pre-wrap text-sm font-semibold leading-relaxed text-stone-700" dir="auto">{answer}</p>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
