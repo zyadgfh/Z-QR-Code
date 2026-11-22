@@ -27,6 +27,11 @@ export default function DashSettings() {
   const [busy, setBusy] = useState(false);
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // مواعيد العمل (F-05) + الثيم ولون الهوية (MKT-03)
+  const [hoursOn, setHoursOn] = useState(false);
+  const [hours, setHours] = useState<Array<{ open: string; close: string } | null>>(Array(7).fill(null));
+  const [theme, setTheme] = useState<string>('');
+  const [brandColor, setBrandColor] = useState<string>('#0f766e');
 
   useEffect(() => {
     api<Summary>('/api/shop/summary').then((s) => {
@@ -35,6 +40,13 @@ export default function DashSettings() {
       setPhone(s.shop.phone);
       setMenuLang(s.shop.menu_language);
       setLogoUrl(s.shop.logo_url);
+      const h = (s.shop as any).hours as Array<{ open: string; close: string } | null> | null;
+      if (Array.isArray(h) && h.length === 7) {
+        setHoursOn(true);
+        setHours(h.map((d) => (d ? { ...d } : null)));
+      }
+      setTheme((s.shop as any).theme || '');
+      setBrandColor((s.shop as any).brand_color || '#0f766e');
     });
   }, []);
 
@@ -57,7 +69,18 @@ export default function DashSettings() {
     setBusy(true);
     setError(null);
     try {
-      await api('/api/shop/settings', { method: 'PUT', body: { name, phone, menu_language: menuLang, logo_url: logoUrl } });
+      await api('/api/shop/settings', {
+        method: 'PUT',
+        body: {
+          name,
+          phone,
+          menu_language: menuLang,
+          logo_url: logoUrl,
+          hours: hoursOn ? hours : null,
+          theme: theme || null,
+          brand_color: /^#[0-9a-fA-F]{6}$/.test(brandColor) ? brandColor : null,
+        },
+      });
       await loadMe();
       setSaved(true);
       setTimeout(() => setSaved(false), 2500);
@@ -96,6 +119,73 @@ export default function DashSettings() {
           {saved && <Ok>{t('saved')}</Ok>}
         </div>
         <p className="mt-2 text-[11px] font-bold text-stone-400">ℹ️ {t('phone')}</p>
+
+        {/* الثيم ولون الهوية */}
+        <div className="mt-4 grid gap-3 border-t border-stone-100 pt-4 sm:grid-cols-2">
+          <Field label={t('themeMenu')}>
+            <Select value={theme} onChange={(e) => setTheme(e.target.value)}>
+              <option value="">{t('themeDefault')}</option>
+              <option value="dark">🌙 Dark</option>
+              <option value="neon">✨ Neon</option>
+              <option value="sunset">🌅 Sunset</option>
+              <option value="mono">◻ Mono</option>
+            </Select>
+          </Field>
+          <Field label={t('brandColor')}>
+            <input
+              type="color"
+              value={brandColor}
+              onChange={(e) => setBrandColor(e.target.value)}
+              className="h-10 w-full cursor-pointer rounded-xl border border-stone-300 bg-white p-1"
+            />
+          </Field>
+        </div>
+
+        {/* مواعيد العمل الأسبوعية */}
+        <div className="mt-4 border-t border-stone-100 pt-4">
+          <label className="flex items-center gap-2 text-sm font-extrabold text-stone-700">
+            <input type="checkbox" checked={hoursOn} onChange={(e) => setHoursOn(e.target.checked)} className="h-4 w-4 accent-teal-700" />
+            ⏰ {t('hoursEnabled')}
+          </label>
+          <p className="mt-1 text-xs text-stone-400">{t('hoursDesc')}</p>
+          {hoursOn && (
+            <div className="mt-3 space-y-1.5">
+              {hours.map((d, i) => {
+                const dayName = new Date(2024, 0, 7 + i).toLocaleDateString(lang === 'ar' ? 'ar-EG' : 'en-GB', { weekday: 'long' });
+                return (
+                  <div key={i} className="flex items-center gap-2">
+                    <span className="w-24 shrink-0 text-sm font-extrabold text-stone-600">{dayName}</span>
+                    <button
+                      onClick={() => setHours((hs) => hs.map((x, xi) => (xi === i ? (x ? null : { open: '09:00', close: '23:00' }) : x)))}
+                      className={`shrink-0 rounded-full px-3 py-1 text-xs font-extrabold ${d ? 'bg-teal-50 text-teal-700' : 'bg-stone-100 text-stone-400'}`}
+                    >
+                      {d ? '✓' : t('closedDay')}
+                    </button>
+                    {d && (
+                      <>
+                        <input
+                          type="time"
+                          value={d.open}
+                          onChange={(e) => setHours((hs) => hs.map((x, xi) => (xi === i && x ? { ...x, open: e.target.value } : x)))}
+                          className="rounded-xl border border-stone-300 px-2 py-1.5 text-sm"
+                          dir="ltr"
+                        />
+                        <span className="text-stone-400">→</span>
+                        <input
+                          type="time"
+                          value={d.close}
+                          onChange={(e) => setHours((hs) => hs.map((x, xi) => (xi === i && x ? { ...x, close: e.target.value } : x)))}
+                          className="rounded-xl border border-stone-300 px-2 py-1.5 text-sm"
+                          dir="ltr"
+                        />
+                      </>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       <div className="rounded-3xl bg-white p-5 shadow-sm">

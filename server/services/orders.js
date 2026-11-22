@@ -18,6 +18,10 @@ async function createPublicOrder(db, slug, payload = {}) {
   if (!shops.isOpen(shop)) {
     throw new HttpError(423, 'SHOP_CLOSED', 'المنيو غير متاح مؤقتًا');
   }
+  // مواعيد العمل الأسبوعية (F-05) — خارج الدوام: مرفوض على مستوى الخادم
+  if (!shops.isOpenNow(shop)) {
+    throw new HttpError(423, 'SHOP_HOURS', 'المحل مغلق الآن حسب مواعيد العمل — اطلب في المواعيد المحددة');
+  }
 
   const table = asInt(payload.table, { min: 1, max: shop.table_count });
   if (!table) throw new HttpError(400, 'INVALID_TABLE', `رقم الترابيزة يجب أن يكون بين 1 و${shop.table_count}`);
@@ -52,6 +56,7 @@ async function createPublicOrder(db, slug, payload = {}) {
     const item = itemsById.get(raw && raw.item_id);
     if (!item) throw new HttpError(400, 'INVALID_ITEM', 'أحد الأصناف غير موجود في هذا المحل');
     if (item.available === false) throw new HttpError(400, 'ITEM_UNAVAILABLE', `«${item.name}» غير متاح حاليًا`);
+    if (item.sold_out === true) throw new HttpError(400, 'ITEM_SOLD_OUT', `«${item.name}» نفد اليوم — جرّب صنفًا آخر`);
 
     // الخيارات المختارة
     let chosenIds = raw.option_ids === undefined ? [] : raw.option_ids;

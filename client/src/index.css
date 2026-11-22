@@ -66,3 +66,18 @@ h1, h2, h3 {
     transition-duration: 0.01ms !important;
   }
 }
+
+/* ---- ثيمات صفحة الزبون (MKT-03) ---- */
+.menu-theme-dark { background: #101014 !important; }
+.menu-theme-dark .m-item { background: #1b1b22; border-color: rgba(255,255,255,.08); box-shadow: 0 4px 18px rgba(0,0,0,.4); }
+.menu-theme-dark .m-item p { color: #f4f4f5; }
+.menu-theme-dark h2 { color: #f4f4f5; }
+.menu-theme-neon { background: #07121a !important; }
+.menu-theme-neon .m-item { background: rgba(13,148,136,.08); border-color: rgba(45,212,191,.35); box-shadow: 0 0 22px rgba(45,212,191,.12); }
+.menu-theme-neon .m-item p { color: #ccfbf1; }
+.menu-theme-neon h2 { color: #2dd4bf; }
+.menu-theme-sunset { background: #fdf3ec !important; }
+.menu-theme-sunset .m-item { background: #fffaf6; border-color: rgba(234,88,12,.15); }
+.menu-theme-sunset h2 { color: #9a3412; }
+.menu-theme-mono { background: #f8f8f8 !important; }
+.menu-theme-mono .m-item { background: #ffffff; border-color: #e5e5e5; box-shadow: none; }

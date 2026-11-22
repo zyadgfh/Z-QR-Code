@@ -8,6 +8,9 @@ export type Shop = {
   menu_language: 'ar' | 'en';
   table_count: number;
   logo_url: string | null;
+  theme?: string | null;
+  brand_color?: string | null;
+  hours?: Array<{ open: string; close: string } | null> | null;
   status: 'trial' | 'active' | 'locked';
   trial_ends_at: number;
   paid_until: number | null;

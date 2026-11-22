@@ -14,14 +14,20 @@ type Item = {
   name: string;
   name_en: string | null;
   description: string | null;
+  description_en?: string | null;
   price: number;
   photo_url: string | null;
+  available?: boolean;
+  sold_out?: boolean;
+  allergens?: string[];
+  calories?: number | null;
+  weight_g?: number | null;
   groups: Group[];
 };
 type MenuData = {
   open: boolean;
   reason?: string;
-  shop?: { slug: string; name: string; logo_url: string | null; menu_language?: Lang; table_count?: number };
+  shop?: { slug: string; name: string; logo_url: string | null; menu_language?: Lang; table_count?: number; theme?: string | null; brand_color?: string | null };
   categories?: { id: string; name: string; name_en: string | null }[];
   items?: Item[];
 };
@@ -37,12 +43,26 @@ export default function CustomerMenu() {
   const [notFound, setNotFound] = useState(false);
   const [activeOrder, setActiveOrder] = useState<string | null>(null);
   const [selected, setSelected] = useState<Item | null>(null);
+  const [q, setQ] = useState('');
+  // مبدل لغة الزبون (F-14/UX-08): يظهر فقط للمحلات المترجمة، ويُحفظ اختياره
+  const [langOverride, setLangOverride] = useState<Lang | null>(() => (localStorage.getItem('qm-cust-lang') as Lang) || null);
 
   const rootRef = useRef<HTMLDivElement>(null);
 
-  const lang = (data?.shop?.menu_language || 'ar') as Lang;
+  const shopLang = (data?.shop?.menu_language || 'ar') as Lang;
+  const hasEn = useMemo(
+    () => !!(data?.items || []).some((i) => i.name_en || i.description_en) || !!(data?.categories || []).some((c) => c.name_en),
+    [data]
+  );
+  const lang = ((hasEn && langOverride) || shopLang) as Lang;
   const t = custT(lang);
   const dir = lang === 'ar' ? 'rtl' : 'ltr';
+
+  const toggleLang = () => {
+    const next: Lang = lang === 'ar' ? 'en' : 'ar';
+    setLangOverride(next);
+    localStorage.setItem('qm-cust-lang', next);
+  };
 
   useEffect(() => {
     document.documentElement.dir = dir;
@@ -98,9 +118,23 @@ export default function CustomerMenu() {
     if (!itemsByCat.has(it.category_id)) itemsByCat.set(it.category_id, []);
     itemsByCat.get(it.category_id)!.push(it);
   }
+  // بحث المنيو (F-08): يعمل محليًا على الاسم والوصف بلغتيه
+  const query = q.trim().toLowerCase();
+  const matches = (it: Item) =>
+    !query ||
+    [it.name, it.name_en, it.description, it.description_en].some((s) => (s || '').toLowerCase().includes(query));
+  const catHasMatch = (c: { id: string }) => (itemsByCat.get(c.id) || []).some(matches);
+
+  const theme = data.shop?.theme;
+  const brandColor = data.shop?.brand_color;
 
   return (
-    <div ref={rootRef} dir={dir} className="mx-auto min-h-dvh max-w-lg bg-[#f5f5f7] pb-28">
+    <div
+      ref={rootRef}
+      dir={dir}
+      className={`mx-auto min-h-dvh max-w-lg bg-[#f5f5f7] pb-28 ${theme ? `menu-theme menu-theme-${theme}` : ''}`}
+      style={brandColor ? ({ ['--brand' as string]: brandColor } as React.CSSProperties) : undefined}
+    >
       {/* الترويسة الزجاجية */}
       <header className="glass sticky top-0 z-30">
         <div className="flex items-center gap-3 px-4 py-3">
@@ -117,6 +151,14 @@ export default function CustomerMenu() {
               {table ? `${t('table')} ${table}` : t('needTable')}
             </p>
           </div>
+          {hasEn && (
+            <button
+              onClick={toggleLang}
+              className="shrink-0 rounded-full bg-white/85 px-3 py-1.5 text-xs font-extrabold text-stone-700 shadow-sm backdrop-blur transition hover:bg-white active:scale-95"
+            >
+              {lang === 'ar' ? 'EN' : 'ع'}
+            </button>
+          )}
         </div>
         {/* شرائح التصنيفات الزجاجية */}
         <nav className="flex gap-2 overflow-x-auto px-4 pb-2.5" style={{ scrollbarWidth: 'none' }}>
@@ -130,6 +172,15 @@ export default function CustomerMenu() {
             </a>
           ))}
         </nav>
+        {/* بحث المنيو */}
+        <div className="px-4 pb-3">
+          <input
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder={t('search')}
+            className="w-full rounded-2xl border border-black/5 bg-white/85 px-4 py-2.5 text-sm font-bold text-stone-700 shadow-sm outline-none backdrop-blur placeholder:font-semibold placeholder:text-stone-400 focus:border-teal-600/40"
+          />
+        </div>
       </header>
 
       {/* طلب نشط */}
@@ -145,39 +196,49 @@ export default function CustomerMenu() {
 
       {/* الأصناف */}
       <main className="mt-2 space-y-6 px-4">
-        {(data.categories || []).map((c) => (
+        {(data.categories || []).filter((c) => catHasMatch(c)).map((c) => (
           <section key={c.id} id={`cat-${c.id}`} data-reveal className="scroll-mt-32">
             <h2 className="mb-2.5 text-[19px] font-extrabold tracking-tight text-stone-900">
               {lang === 'en' && c.name_en ? c.name_en : c.name}
             </h2>
             <div className="space-y-2.5">
-              {(itemsByCat.get(c.id) || []).map((it) => (
-                <button
-                  key={it.id}
-                  onClick={() => setSelected(it)}
-                  className="flex w-full items-center gap-3 rounded-[22px] border border-black/[0.04] bg-white p-3 text-start shadow-apple transition active:scale-[0.98]"
-                >
-                  {it.photo_url ? (
-                    <img src={it.photo_url} alt="" loading="lazy" className="h-16 w-16 shrink-0 rounded-2xl object-cover" />
-                  ) : (
-                    <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-2xl">
-                      {EMOJIS[(data.categories || []).indexOf(c) % EMOJIS.length]}
+              {(itemsByCat.get(c.id) || []).filter(matches).map((it) => {
+                const sold = it.sold_out === true;
+                const desc = lang === 'en' && it.description_en ? it.description_en : it.description;
+                return (
+                  <button
+                    key={it.id}
+                    onClick={() => setSelected(it)}
+                    className={`m-item flex w-full items-center gap-3 rounded-[22px] border border-black/[0.04] bg-white p-3 text-start shadow-apple transition active:scale-[0.98] ${sold ? 'opacity-50 saturate-50' : ''}`}
+                  >
+                    {it.photo_url ? (
+                      <img src={it.photo_url} alt="" loading="lazy" className="h-16 w-16 shrink-0 rounded-2xl object-cover" />
+                    ) : (
+                      <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-stone-100 text-2xl">
+                        {EMOJIS[(data.categories || []).indexOf(c) % EMOJIS.length]}
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-bold text-stone-900">
+                        {lang === 'en' && it.name_en ? it.name_en : it.name}
+                        {sold && <span className="ms-2 rounded-full bg-red-100 px-2 py-0.5 text-[10px] font-black text-red-600">{t('soldOut')}</span>}
+                      </p>
+                      {desc && <p className="mt-0.5 line-clamp-1 text-xs text-stone-500">{desc}</p>}
+                      <p className="mt-1 text-sm font-extrabold text-teal-700">{money(lang, it.price)}</p>
                     </div>
-                  )}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate font-bold text-stone-900">{lang === 'en' && it.name_en ? it.name_en : it.name}</p>
-                    {it.description && <p className="mt-0.5 line-clamp-1 text-xs text-stone-500">{it.description}</p>}
-                    <p className="mt-1 text-sm font-extrabold text-teal-700">{money(lang, it.price)}</p>
-                  </div>
-                  <span className="flex h-8 w-8 items-center justify-center rounded-full bg-teal-50 text-lg font-black text-teal-700">+</span>
-                </button>
-              ))}
-              {(itemsByCat.get(c.id) || []).length === 0 && (
+                    <span className={`flex h-8 w-8 items-center justify-center rounded-full text-lg font-black ${sold ? 'bg-stone-100 text-stone-400' : 'bg-teal-50 text-teal-700'}`}>+</span>
+                  </button>
+                );
+              })}
+              {(itemsByCat.get(c.id) || []).filter(matches).length === 0 && (
                 <p className="py-2 text-sm text-stone-400">—</p>
               )}
             </div>
           </section>
         ))}
+        {query && !(data.categories || []).some(catHasMatch) && (
+          <p className="py-8 text-center text-sm font-bold text-stone-400">— {t('search')} —</p>
+        )}
       </main>
 
       {/* شريط السلة العائم الزجاجي */}
@@ -211,7 +272,9 @@ export function Unavailable({ lang, name, logo, reason }: { lang: Lang; name: st
         <div className="flex h-20 w-20 items-center justify-center rounded-full bg-stone-300 text-3xl">🍽️</div>
       )}
       <h1 className="text-xl font-extrabold text-stone-700">{name}</h1>
-      <p className="rounded-2xl bg-white px-5 py-4 text-lg font-bold text-stone-600 shadow-apple">{t('locked')}</p>
+      <p className="rounded-2xl bg-white px-5 py-4 text-lg font-bold text-stone-600 shadow-apple">
+        {reason === 'closed_hours' ? t('closedNow') : t('locked')}
+      </p>
     </div>
   );
 }
@@ -335,7 +398,22 @@ function ItemSheet({
         <div className="mx-auto mb-3 h-1.5 w-12 rounded-full bg-stone-300 sm:hidden" />
         {item.photo_url && <img src={item.photo_url} alt="" className="mb-3 h-44 w-full rounded-[22px] object-cover" />}
         <h3 className="text-[21px] font-extrabold tracking-tight text-stone-900">{lang === 'en' && item.name_en ? item.name_en : item.name}</h3>
-        {item.description && <p className="mt-1 text-sm text-stone-500">{item.description}</p>}
+        {(lang === 'en' ? item.description_en || item.description : item.description) && (
+          <p className="mt-1 text-sm text-stone-500">{lang === 'en' ? item.description_en || item.description : item.description}</p>
+        )}
+        {/* مسببات الحساسية والسعرات والوزن (F-09) */}
+        {((item.allergens && item.allergens.length > 0) || item.calories || item.weight_g) && (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {(item.allergens || []).map((a) => (
+              <span key={a} className="rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-bold text-amber-700">⚠ {a}</span>
+            ))}
+            {Boolean(item.calories) && <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-bold text-stone-600">🔥 {item.calories} kcal</span>}
+            {Boolean(item.weight_g) && <span className="rounded-full bg-stone-100 px-2.5 py-1 text-[11px] font-bold text-stone-600">⚖ {item.weight_g} g</span>}
+          </div>
+        )}
+        {item.sold_out === true && (
+          <p className="mt-2 rounded-2xl bg-red-50 px-3 py-2 text-sm font-extrabold text-red-600">✕ {t('soldOut')}</p>
+        )}
 
         <div className="mt-4 space-y-4">
           {item.groups.map((g) => (
@@ -377,10 +455,10 @@ function ItemSheet({
           </div>
           <button
             onClick={onAdd}
-            disabled={Boolean(missing.length) || !table}
+            disabled={Boolean(missing.length) || !table || item.sold_out === true}
             className="flex-1 rounded-2xl bg-teal-700 px-4 py-3 font-extrabold text-white shadow-apple transition hover:bg-teal-800 active:scale-[0.98] disabled:bg-stone-300"
           >
-            {added ? t('added') : `${t('add')} · ${money(lang, Math.round(unit * qty * 100) / 100)}`}
+            {item.sold_out === true ? `✕ ${t('soldOut')}` : added ? t('added') : `${t('add')} · ${money(lang, Math.round(unit * qty * 100) / 100)}`}
           </button>
         </div>
         {!table && <p className="mt-2 text-center text-xs font-bold text-amber-600">{t('needTable')}</p>}

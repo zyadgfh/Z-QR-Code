@@ -179,4 +179,84 @@ async function extractMenu({ images, apiKey, model, fetchImpl } = {}) {
   return normalizeDraft(raw);
 }
 
-module.exports = { extractMenu, normalizeDraft, parseDataUrl, DEFAULT_MODEL };
+/**
+ * ترجمة محتوى المنيو للإنجليزية (A-01): اقتراحات فقط — لا يكتب في القاعدة،
+ * المالك يراجع ويعتمد من الواجهة ثم تُحفظ عبر مسارات التعديل العادية.
+ */
+async function translateMenu({ items, categories, apiKey, model, fetchImpl } = {}) {
+  if (!apiKey) {
+    throw new HttpError(503, 'AI_NOT_CONFIGURED', 'خدمة الترجمة غير مفعّلة بعد — يحتاج GEMINI_API_KEY في إعدادات الخادم');
+  }
+  const list = [
+    ...(categories || []).map((c) => ({ kind: 'category', id: c.id, name: c.name })),
+    ...(items || []).map((i) => ({ kind: 'item', id: i.id, name: i.name, description: i.description || '' })),
+  ];
+  if (!list.length) throw new HttpError(400, 'EMPTY_MENU', 'لا يوجد محتوى لترجمته — أضف أصنافًا أولًا');
+
+  const TRANSLATE_SCHEMA = {
+    type: 'object',
+    properties: {
+      categories: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, name_en: { type: 'string' } }, required: ['id', 'name_en'] } },
+      items: { type: 'array', items: { type: 'object', properties: { id: { type: 'string' }, name_en: { type: 'string' }, description_en: { type: 'string' } }, required: ['id', 'name_en'] } },
+    },
+    required: ['categories', 'items'],
+  };
+
+  const doFetch = fetchImpl || globalThis.fetch;
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model || DEFAULT_MODEL}:generateContent`;
+  const body = {
+    contents: [
+      {
+        parts: [
+          {
+            text:
+              'أنت مترجم قوائم طعام من العربية إلى الإنجليزية لمطاعم وكافيهات. ' +
+              'ترجم كل عنصر إلى اسم إنجليزي جذاب قصير كما يكتبه مطعم محترف (وليس ترجمة حرفية). ' +
+              'ترجم الوصف إن وُجد إلى جملة إنجليزية طبيعية قصيرة. ' +
+              'أعد المعرّفات (id) كما استلمتها دون تغيير. لا تضف عناصر جديدة. القائمة:\n' +
+              JSON.stringify(list),
+          },
+        ],
+      },
+    ],
+    generationConfig: {
+      temperature: 0.2,
+      responseMimeType: 'application/json',
+      responseSchema: TRANSLATE_SCHEMA,
+    },
+  };
+
+  let res;
+  try {
+    res = await doFetch(url, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-goog-api-key': apiKey },
+      body: JSON.stringify(body),
+    });
+  } catch {
+    throw new HttpError(502, 'AI_UNREACHABLE', 'تعذر الاتصال بخدمة الترجمة — حاول مرة أخرى');
+  }
+  if (!res.ok) {
+    throw new HttpError(502, 'AI_ERROR', `فشل طلب الترجمة (رمز ${res.status}) — حاول مرة أخرى لاحقًا`);
+  }
+  const json = await res.json();
+  let text = '';
+  try {
+    text = json.candidates[0].content.parts.map((p) => p.text || '').join('');
+  } catch {
+    throw new HttpError(502, 'AI_BAD_RESPONSE', 'رد غير متوقع من خدمة الترجمة');
+  }
+  let out;
+  try {
+    out = JSON.parse(text.replace(/^\s*```(?:json)?/i, '').replace(/```\s*$/, ''));
+  } catch {
+    throw new HttpError(502, 'AI_BAD_JSON', 'تعذر تحليل نتيجة الترجمة — حاول مرة أخرى');
+  }
+  // تنظيف: نفس المعرفات فقط + حدود طول
+  const validIds = new Set(list.map((x) => x.id));
+  const cat = (out.categories || []).filter((x) => validIds.has(x.id) && x.name_en).map((x) => ({ id: x.id, name_en: String(x.name_en).slice(0, 60) }));
+  const its = (out.items || []).filter((x) => validIds.has(x.id) && x.name_en).map((x) => ({ id: x.id, name_en: String(x.name_en).slice(0, 100), description_en: x.description_en ? String(x.description_en).slice(0, 300) : null }));
+  return { categories: cat, items: its };
+}
+
+module.exports = { extractMenu, translateMenu, normalizeDraft, parseDataUrl, DEFAULT_MODEL };
