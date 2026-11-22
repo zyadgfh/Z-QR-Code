@@ -20,7 +20,7 @@ export async function startServer({ env = {}, seed = true } = {}) {
   const { app } = createApp({
     db,
     seed,
-    env: { DB_ADAPTER: 'memory', JWT_SECRET: 'test-secret', ...env },
+    env: { DB_ADAPTER: 'memory', JWT_SECRET: 'test-secret', MFA_ENFORCED: '0', ...env },
   });
   const server = app.listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));

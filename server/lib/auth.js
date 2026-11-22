@@ -24,10 +24,13 @@ function b64url(buf) {
   return Buffer.from(buf).toString('base64url');
 }
 
-function signToken(userId, secret, { expiresMs = 14 * 24 * 60 * 60 * 1000 } = {}) {
+function signToken(userId, secret, { expiresMs = 14 * 24 * 60 * 60 * 1000, tv = 0, jti, kind } = {}) {
   const header = b64url(JSON.stringify({ alg: 'HS256', typ: 'JWT' }));
   const now = Date.now();
-  const payload = b64url(JSON.stringify({ sub: userId, iat: now, exp: now + expiresMs }));
+  const body = { sub: userId, iat: now, exp: now + expiresMs, tv };
+  if (jti) body.jti = jti;
+  if (kind) body.kind = kind;
+  const payload = b64url(JSON.stringify(body));
   const sig = crypto
     .createHmac('sha256', secret)
     .update(`${header}.${payload}`)

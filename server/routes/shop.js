@@ -2,8 +2,8 @@
 
 const express = require('express');
 const { h, HttpError } = require('../lib/errors');
-const { verifyPassword, signToken, bearerToken, verifyToken } = require('../lib/auth');
 const { asStr, isEmail } = require('../lib/validate');
+const { authenticate } = require('../lib/session');
 const menuService = require('../services/menu');
 const ordersService = require('../services/orders');
 const shopsService = require('../services/shops');
@@ -15,17 +15,10 @@ module.exports = function shopRoutes(ctx) {
   const { db, env } = ctx;
   const r = express.Router();
 
-  const secret = () => env.JWT_SECRET || 'dev-secret-change-me';
-
-  // ---------- الحماية: مستخدم مسجّل + عضوية محل ----------
+  // ---------- الحماية: مستخدم مسجّل + عضوية محل (+ جلسات وMFA عبر lib/session) ----------
   r.use(
     h(async (req, res, next) => {
-      const token = bearerToken(req);
-      if (!token) throw new HttpError(401, 'UNAUTHORIZED', 'سجّل الدخول أولًا');
-      const payload = verifyToken(token, secret());
-      if (!payload) throw new HttpError(401, 'UNAUTHORIZED', 'انتهت الجلسة، سجّل الدخول من جديد');
-      const user = await db.get('users', payload.sub);
-      if (!user) throw new HttpError(401, 'UNAUTHORIZED', 'الحساب غير موجود');
+      const { user } = await authenticate(ctx, req, { enforceMfa: true });
       const mems = await db.query('memberships', [{ field: 'user_id', value: user.id }]);
       if (!mems.length) throw new HttpError(403, 'NO_SHOP', 'لا يوجد محل مرتبط بهذا الحساب');
       req.user = user;

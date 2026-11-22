@@ -16,27 +16,41 @@ export type Shop = {
 
 export type Membership = { shop_id: string; role: 'owner' | 'staff'; shop: Shop };
 
-export type Me = {
-  user: { id: string; email: string; role: 'platform_admin' | 'owner' | 'staff' };
-  memberships: Membership[];
+export type MeUser = {
+  id: string;
+  email: string;
+  role: 'platform_admin' | 'owner' | 'staff';
+  mfa_enabled: boolean;
+  mfa_enforced: boolean;
 };
+
+export type Me = { user: MeUser; memberships: Membership[] };
 
 type AuthState = {
   token: string | null;
+  mfaToken: string | null; // توكن التحدي المؤقت بين خطوتي الدخول (SEC-03)
   me: Me | null;
   setToken: (t: string) => void;
+  setMfaToken: (t: string | null) => void;
   loadMe: () => Promise<Me | null>;
   logout: () => void;
 };
 
 const KEY = 'qm-token';
+const MFA_KEY = 'qm-mfa-token';
 
 export const useAuth = create<AuthState>((set, get) => ({
   token: localStorage.getItem(KEY),
+  mfaToken: sessionStorage.getItem(MFA_KEY),
   me: null,
   setToken: (t) => {
     localStorage.setItem(KEY, t);
     set({ token: t });
+  },
+  setMfaToken: (t) => {
+    if (t) sessionStorage.setItem(MFA_KEY, t);
+    else sessionStorage.removeItem(MFA_KEY);
+    set({ mfaToken: t });
   },
   loadMe: async () => {
     const token = get().token;
@@ -56,6 +70,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
   logout: () => {
     localStorage.removeItem(KEY);
-    set({ token: null, me: null });
+    sessionStorage.removeItem(MFA_KEY);
+    set({ token: null, mfaToken: null, me: null });
   },
 }));

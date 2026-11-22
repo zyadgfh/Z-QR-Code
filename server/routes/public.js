@@ -24,7 +24,7 @@ module.exports = function publicRoutes(ctx) {
     rateLimit({
       windowMs: 60000,
       max: 10,
-      keyFn: (req) => `order:${req.app.get('qm_app_id')}:${req.ip || 'x'}`,
+      keyFn: (req) => `order:${req.ip || 'x'}`,
     }),
     h(async (req, res) => {
       const result = await ordersService.createPublicOrder(db, req.params.slug, req.body || {});
