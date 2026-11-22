@@ -27,7 +27,10 @@ export default function DashLogin({ admin = false }: { admin?: boolean }) {
 
   const [view, setView] = useState<'login' | 'forgot' | 'reset' | 'mfa'>('login');
   const cardRef = useRef<HTMLFormElement | null>(null);
-  useEffect(() => fadeInUp(cardRef.current), []);
+  useEffect(() => {
+    const mm = fadeInUp(cardRef.current);
+    return () => mm?.revert();
+  }, []);
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [code, setCode] = useState('');

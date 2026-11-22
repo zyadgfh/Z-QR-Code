@@ -45,8 +45,9 @@ export default function MfaGate({ variant = 'gate' }: { variant?: 'gate' | 'card
   useEffect(() => {
     // البوابة الإلزامية (SEC-03/Q7) تبدأ الإعداد تلقائيًا — كان يبدأ فقط في وضع البطاقة
     // فعلِقت بوابة الإنتاج على «…» بلا زر (أُكتشف في أول دخول إنتاجي فعلي).
-    fadeInUp(cardRef.current);
+    const mm = fadeInUp(cardRef.current);
     start();
+    return () => mm?.revert();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 

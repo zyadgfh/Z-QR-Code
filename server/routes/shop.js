@@ -17,6 +17,7 @@ const branchesService = require('../services/branches');
 const loyaltyService = require('../services/loyalty');
 const analyticsService = require('../services/analytics');
 const auditService = require('../services/audit');
+const domainsService = require('../services/domains');
 const { ordersCsv } = require('../lib/csv');
 
 module.exports = function shopRoutes(ctx) {
@@ -270,6 +271,37 @@ module.exports = function shopRoutes(ctx) {
       res.json(await shopsService.byId(db, req.member.shop_id));
     })
   );
+  // ---------- الدومين المخصص (MKT-02) — مالك بصلاحية settings ----------
+  r.get(
+    '/domain',
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      const shop = await shopsService.byId(db, req.member.shop_id);
+      res.json({ custom_domain: shop.custom_domain ?? null, domain_status: shop.domain_status ?? null, domain_token: shop.domain_token ?? null });
+    })
+  );
+  r.put(
+    '/domain',
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      const saved = await domainsService.setDomain(db, req.member.shop_id, (req.body || {}).domain);
+      const shop = await shopsService.byId(db, req.member.shop_id);
+      auditService.log(db, req.member, 'domain.set', shop.custom_domain || 'cleared').catch(() => {});
+      res.json({ custom_domain: shop.custom_domain, domain_status: shop.domain_status, domain_token: shop.domain_token });
+    })
+  );
+  r.post(
+    '/domain/verify',
+    rateLimit({ windowMs: 60000, max: 10, keyFn: (req) => 'dverify:' + req.member.shop_id }),
+    h(async (req, res) => {
+      requirePerm(req, 'settings');
+      const shop = await domainsService.verifyDomain(db, req.member.shop_id);
+      const attached = await domainsService.attachToVercel(env, shop.custom_domain);
+      auditService.log(db, req.member, 'domain.verify', shop.custom_domain).catch(() => {});
+      res.json({ custom_domain: shop.custom_domain, domain_status: shop.domain_status, vercel_attached: attached });
+    })
+  );
+
   r.put(
     '/settings',
     h(async (req, res) => {

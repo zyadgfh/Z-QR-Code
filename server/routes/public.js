@@ -1,17 +1,29 @@
 'use strict';
 
 const express = require('express');
-const { h } = require('../lib/errors');
+const { h, HttpError } = require('../lib/errors');
 const { rateLimit } = require('../lib/ratelimit');
 const { sendWithEtag } = require('../lib/etag');
 const menuService = require('../services/menu');
 const ordersService = require('../services/orders');
 const aiService = require('../services/ai');
+const domainsService = require('../services/domains');
 const adminService = require('../services/admin');
 
 module.exports = function publicRoutes(ctx) {
   const { db, env, notifier } = ctx;
   const r = express.Router();
+
+  // حسم المحل من الدومين المخصص (MKT-02): الزبون يمسح QR على cafe.example.com
+  r.get(
+    '/resolve',
+    rateLimit({ windowMs: 60000, max: 60, keyFn: (req) => 'resolve:' + (req.ip || 'x') }),
+    h(async (req, res) => {
+      const shop = await domainsService.findByHost(db, req.headers.host);
+      if (!shop) throw new HttpError(404, 'NOT_FOUND', 'لا يوجد محل مرتبط بهذا الدومين');
+      res.json({ slug: shop.slug, name: shop.name, menu_language: shop.menu_language || 'ar' });
+    })
+  );
 
   // قائمة المنيو العامة حسب المحل
   r.get(

@@ -24,6 +24,7 @@ export default function DashOrders() {
   const [eta, setEta] = useState(15);
   const listRef = useRef<HTMLDivElement>(null);
   const lastCount = useRef<number | null>(null);
+  const lastMM = useRef<{ revert: () => void } | null>(null);
   const [pushOn, setPushOn] = useState(() => localStorage.getItem('qm-push') === '1');
   const [pushError, setPushError] = useState<string | null>(null);
 
@@ -44,9 +45,10 @@ export default function DashOrders() {
   useEffect(() => {
     if (orders && orders.length && orders.length !== lastCount.current) {
       lastCount.current = orders.length;
-      staggerCards(listRef.current);
+      lastMM.current = staggerCards(listRef.current);
     }
   }, [orders]);
+  useEffect(() => () => lastMM.current?.revert(), []);
 
   // عدّاد الوقت لأعمار الطلبات
   useEffect(() => {

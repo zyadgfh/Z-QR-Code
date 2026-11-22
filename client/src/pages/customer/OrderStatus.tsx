@@ -45,6 +45,7 @@ export default function OrderStatus() {
   const checkRef = useRef<HTMLParagraphElement>(null);
   const busyRef = useRef<HTMLDivElement>(null);
   const pulsedBusy = useRef(false);
+  const pulseMM = useRef<{ revert: () => void } | null>(null);
   const poppedCheck = useRef(false);
 
   const lang = (st?.shop?.menu_language || 'ar') as Lang;
@@ -77,13 +78,15 @@ export default function OrderStatus() {
   useEffect(() => {
     if (showBusy && !pulsedBusy.current) {
       pulsedBusy.current = true;
-      if (busyRef.current) haloPulse(busyRef.current);
+      pulseMM.current = busyRef.current ? haloPulse(busyRef.current) : null;
     }
     if (st?.state === 'accepted' && !poppedCheck.current) {
       poppedCheck.current = true;
-      popIn(checkRef.current);
+      const mm = popIn(checkRef.current);
+      return () => mm?.revert();
     }
   }, [showBusy, st?.state]);
+  useEffect(() => () => pulseMM.current?.revert(), []);
 
   if (gone)
     return (
