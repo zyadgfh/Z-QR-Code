@@ -69,6 +69,7 @@ export default function DashLayout() {
   const navItems = [
     { to: '/dash', label: t('orders'), icon: '🧾', show: true },
     { to: '/dash/kds', label: t('kdsTitle'), icon: '👨‍🍳', show: true },
+    { to: '/dash/analytics', label: t('analytics'), icon: '📊', show: role === 'owner' },
     { to: '/dash/menu', label: t('menu'), icon: '📋', show: role === 'owner' },
     { to: '/dash/tables', label: t('tables'), icon: '▦', show: role === 'owner' },
     { to: '/dash/staff', label: t('staff'), icon: '👥', show: role === 'owner' },

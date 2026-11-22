@@ -11,6 +11,8 @@ import DashTables from './pages/dash/DashTables';
 import DashSettings from './pages/dash/DashSettings';
 import DashStaff from './pages/dash/DashStaff';
 import AdminPanel from './pages/admin/AdminPanel';
+import DashAnalytics from './pages/dash/DashAnalytics';
+import LegalPage from './pages/LegalPage';
 
 export default function App() {
   return (
@@ -24,8 +26,12 @@ export default function App() {
         <Route path="tables" element={<DashTables />} />
         <Route path="settings" element={<DashSettings />} />
         <Route path="staff" element={<DashStaff />} />
+        <Route path="analytics" element={<DashAnalytics />} />
       </Route>
       <Route path="/admin" element={<AdminPanel />} />
+      {/* صفحات قانونية عامة (D6) */}
+      <Route path="/privacy" element={<LegalPage />} />
+      <Route path="/terms" element={<LegalPage />} />
       {/* العميل: /{shop-slug}/t/{table} حسب المواصفات */}
       <Route path="/:slug" element={<CustomerMenu />} />
       <Route path="/:slug/t/:table" element={<CustomerMenu />} />

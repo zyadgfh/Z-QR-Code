@@ -157,6 +157,15 @@ async function createPublicOrder(db, slug, payload = {}) {
     if (grandTotal <= 0) throw new HttpError(400, 'INVALID_TOTAL', 'إجمالي الطلب غير صحيح');
   }
 
+  // الإكرامية (D6): تُضاف آخرًا فوق كل شيء — لا تخضع للخصومات ولا سقف الاسترداد
+  let tip = 0;
+  if (payload.tip !== undefined && payload.tip !== null && payload.tip !== '') {
+    tip = Math.round(Number(payload.tip) * 100) / 100;
+    if (!Number.isFinite(tip) || tip < 0 || tip > 1000)
+      throw new HttpError(400, 'INVALID_TIP', 'الإكرامية يجب أن تكون بين 0 و1000');
+    grandTotal = roundMoney(grandTotal + tip);
+  }
+
   // حدود الخطة المجانية (BIZ-02) — مفرضة على مستوى الخادم
   if ((shop.plan || 'free') !== 'pro') {
     const settings = await adminService.getSettings(db);
@@ -186,6 +195,7 @@ async function createPublicOrder(db, slug, payload = {}) {
     loyalty_points_used: loyaltyUse ? loyaltyUse.points_used : 0,
     loyalty_discount: loyaltyUse ? loyaltyUse.discount : 0,
     delivery_fee: deliveryFee,
+    tip,
     total: grandTotal,
     status: 'pending',
     eta_minutes: null,
@@ -202,7 +212,7 @@ async function createPublicOrder(db, slug, payload = {}) {
     const rows = await db.query('discounts', [{ field: 'id', value: discount.id }]);
     if (rows[0]) await db.update('discounts', discount.id, { used_count: (rows[0].used_count || 0) + 1 });
   }
-  return { id, total: grandTotal, subtotal: total, discount_amount: order.discount_amount, loyalty_discount: order.loyalty_discount, points_earned: pointsEarned, delivery_fee: deliveryFee, table_number: order.table_number, branch_name: branchName, service, created_at: now };
+  return { id, total: grandTotal, subtotal: total, discount_amount: order.discount_amount, loyalty_discount: order.loyalty_discount, points_earned: pointsEarned, delivery_fee: deliveryFee, tip, table_number: order.table_number, branch_name: branchName, service, created_at: now };
 }
 
 /** حالة الطلب للعميل — بدون كشف مراحل العمل الداخلية */
@@ -225,6 +235,8 @@ async function publicStatus(db, orderId) {
     loyalty_points_used: order.loyalty_points_used || 0,
     loyalty_discount: order.loyalty_discount || 0,
     delivery_fee: order.delivery_fee || 0,
+    tip: order.tip || 0,
+    rating: order.rating ? { stars: order.rating.stars, comment: order.rating.comment || '' } : null,
     total: order.total,
     items: (order.items || []).map((i) => ({
       name: i.name,
@@ -259,6 +271,20 @@ async function setPhone(db, orderId, phone) {
     }
   }
   return { ok: true, points_earned: pointsEarned };
+}
+
+/** تقييم الطلب (D6) — مرة واحدة لكل طلب؛ النجوم 1..5 وتعليق اختياري */
+async function rateOrder(db, orderId, payload = {}) {
+  if (typeof orderId !== 'string' || orderId.length < 8) throw new HttpError(404, 'NOT_FOUND', 'الطلب غير موجود');
+  const stars = Math.floor(Number(payload.stars));
+  if (!Number.isFinite(stars) || stars < 1 || stars > 5)
+    throw new HttpError(400, 'INVALID_RATING', 'التقييم يجب أن يكون من 1 إلى 5 نجوم');
+  const comment = typeof payload.comment === 'string' ? payload.comment.trim().slice(0, 300) : '';
+  const order = await db.get('orders', orderId);
+  if (!order) throw new HttpError(404, 'NOT_FOUND', 'الطلب غير موجود');
+  if (order.rating) throw new HttpError(409, 'ALREADY_RATED', 'تم تقييم هذا الطلب من قبل');
+  await db.update('orders', orderId, { rating: { stars, comment, created_at: Date.now() } });
+  return { ok: true, stars };
 }
 
 /** قائمة طلبات المحل للوحة التحكم (الأحدث أولًا) */
@@ -301,4 +327,4 @@ async function mustShopOrder(db, shopId, orderId) {
   return order;
 }
 
-module.exports = { createPublicOrder, publicStatus, setPhone, listForShop, accept, setStage };
+module.exports = { createPublicOrder, publicStatus, setPhone, rateOrder, listForShop, accept, setStage };

@@ -7,6 +7,7 @@ import { compressImage } from '../../lib/img';
 import { Btn, Card, CardHead, Err, Field, Input, Ok, Select, Spinner, StatusChip } from '../../components/ui';
 import ChangePasswordCard from '../../components/ChangePassword';
 import DiscountsCard from '../../components/DiscountsCard';
+import BackupCard from '../../components/BackupCard';
 import BranchesCard from '../../components/BranchesCard';
 import LoyaltyCard from '../../components/LoyaltyCard';
 import { popIn, staggerCards } from '../../lib/anim';
@@ -308,6 +309,7 @@ export default function DashSettings() {
 
       <BranchesCard />
       <LoyaltyCard />
+      <BackupCard />
       <ChangePasswordCard />
       <DiscountsCard />
     </div>

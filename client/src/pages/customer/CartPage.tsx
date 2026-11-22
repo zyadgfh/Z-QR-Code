@@ -26,6 +26,8 @@ export default function CartPage() {
   // الولاء (F-17): رصيد بالهاتف + استرداد اختياري
   const [loy, setLoy] = useState<{ points: number; redeem_value: number; max_percent: number } | null>(null);
   const [redeem, setRedeem] = useState('');
+  // الإكرامية (D6) — تُضاف فوق الإجمالي في الخادم
+  const [tip, setTip] = useState(0);
   const listRef = useRef<HTMLDivElement>(null);
   const headRef = useRef<HTMLDivElement>(null);
   const branchId = useCart((s) => s.branchBySlug[slug] || '');
@@ -81,6 +83,7 @@ export default function CartPage() {
       if (discountCode.trim()) body.discount_code = discountCode.trim();
       const rp = Math.floor(Number(redeem));
       if (loy && rp > 0) body.redeem_points = rp;
+      if (tip > 0) body.tip = tip;
       const res = await api<{ id: string }>(`/api/public/shops/${slug}/orders`, { method: 'POST', body });
       if (table) localStorage.setItem(`qm-order:${slug}:${table}`, res.id);
       clear(slug);
@@ -214,6 +217,24 @@ export default function CartPage() {
             )}
 
             {/* حقل الهاتف للجلوس عند تفعيل الولاء (بدونه لا يُحسب الرصيد) */}
+            {/* الإكرامية (D6) */}
+            <div className="rounded-[22px] border border-black/[0.04] bg-white p-3.5 shadow-apple">
+              <label className="mb-2 block text-xs font-bold text-stone-500">💖 {t('tipTitle')}</label>
+              <div className="grid grid-cols-4 gap-2">
+                {[0, 5, 10, 15].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setTip(v)}
+                    className={`rounded-2xl border px-2 py-2.5 text-sm font-extrabold transition active:scale-95 ${
+                      tip === v ? 'border-teal-700 bg-teal-50 text-teal-800 shadow-sm' : 'border-stone-200 bg-white text-stone-600'
+                    }`}
+                  >
+                    {v === 0 ? t('tipNone') : `${v}`}
+                  </button>
+                ))}
+              </div>
+            </div>
+
             {/* كود الخصم (F-06) — التحقق والحساب في الخادم */}
             <div className="rounded-[22px] border border-black/[0.04] bg-white p-3.5 shadow-apple">
               <label className="mb-1 block text-xs font-bold text-stone-500">{t('discountCode')}</label>
@@ -228,7 +249,7 @@ export default function CartPage() {
 
             <div className="flex items-center justify-between rounded-[22px] bg-white px-4 py-3 shadow-apple">
               <span className="font-extrabold text-stone-900">{t('total')}</span>
-              <span className="text-lg font-black text-teal-700">{money(lang, total)}</span>
+              <span className="text-lg font-black text-teal-700">{money(lang, Math.round((total + tip) * 100) / 100)}</span>
             </div>
             {error && <p className="rounded-xl bg-red-50 px-3 py-2 text-sm font-bold text-red-700">{error}</p>}
           </>
@@ -242,7 +263,7 @@ export default function CartPage() {
             disabled={sending}
             className="glass-float w-full rounded-[22px] border border-white/60 py-4 text-lg font-extrabold text-teal-800 shadow-apple transition active:scale-[0.98] disabled:opacity-60"
           >
-            {sending ? t('sending') : `${t('send')} · ${money(lang, total)}`}
+            {sending ? t('sending') : `${t('send')} · ${money(lang, Math.round((total + tip) * 100) / 100)}`}
           </button>
         </div>
       )}
