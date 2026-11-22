@@ -7,6 +7,7 @@ const { sendWithEtag } = require('../lib/etag');
 const menuService = require('../services/menu');
 const ordersService = require('../services/orders');
 const aiService = require('../services/ai');
+const adminService = require('../services/admin');
 
 module.exports = function publicRoutes(ctx) {
   const { db, env, notifier } = ctx;
@@ -91,6 +92,15 @@ module.exports = function publicRoutes(ctx) {
         model: env.GEMINI_MODEL || aiService.DEFAULT_MODEL,
       });
       res.json(out);
+    })
+  );
+
+  // هوية المنصة العامة (D7) — حقول آمنة فقط للصفحات القانونية والتذييل
+  r.get(
+    '/platform',
+    h(async (req, res) => {
+      const s = await adminService.getSettings(db);
+      res.json({ name: s.platform_name, description: s.platform_description, support_email: s.support_email || null, default_language: s.default_language });
     })
   );
 

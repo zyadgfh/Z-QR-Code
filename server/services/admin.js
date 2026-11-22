@@ -165,6 +165,11 @@ const DEFAULT_SETTINGS = {
     'حوّل مبلغ الاشتراك على InstaPay / فودافون كاش على الرقم: 01001234567 (QR Menu)، ثم ابعت صورة التحويل للدعم وسيتم التفعيل خلال دقائق.',
   free_item_limit: 50,
   free_order_limit: 200,
+  // هوية المنصة العامة (D7) — تظهر في الصفحات القانونية والتذييل
+  platform_name: 'QR Menu',
+  platform_description: 'منصة قوائم المطاعم برمز QR — منيو وطلبات وفروع وولاء للمحلات',
+  support_email: '',
+  default_language: 'ar',
 };
 
 async function getSettings(db) {
@@ -179,6 +184,10 @@ async function getSettings(db) {
     payment_instructions: s.payment_instructions,
     free_item_limit: s.free_item_limit ?? DEFAULT_SETTINGS.free_item_limit,
     free_order_limit: s.free_order_limit ?? DEFAULT_SETTINGS.free_order_limit,
+    platform_name: s.platform_name ?? DEFAULT_SETTINGS.platform_name,
+    platform_description: s.platform_description ?? DEFAULT_SETTINGS.platform_description,
+    support_email: s.support_email ?? '',
+    default_language: s.default_language ?? DEFAULT_SETTINGS.default_language,
   };
 }
 
@@ -204,6 +213,25 @@ async function updateSettings(db, patch = {}) {
     const v = asInt(patch.free_order_limit, { min: 1, max: 1000000 });
     if (!v) throw new HttpError(400, 'INVALID_LIMIT', 'حد الطلبات غير صحيح');
     out.free_order_limit = v;
+  }
+  // هوية المنصة العامة (D7)
+  if (patch.platform_name !== undefined) {
+    const v = asStr(patch.platform_name, { min: 2, max: 60 });
+    if (!v) throw new HttpError(400, 'INVALID_NAME', 'اسم المنصة مطلوب (2-60 حرف)');
+    out.platform_name = v;
+  }
+  if (patch.platform_description !== undefined) {
+    const v = typeof patch.platform_description === 'string' ? patch.platform_description.trim().slice(0, 300) : '';
+    out.platform_description = v;
+  }
+  if (patch.support_email !== undefined) {
+    const v = typeof patch.support_email === 'string' ? patch.support_email.trim().slice(0, 120) : '';
+    if (v && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v)) throw new HttpError(400, 'INVALID_EMAIL', 'بريد الدعم غير صحيح');
+    out.support_email = v;
+  }
+  if (patch.default_language !== undefined) {
+    if (!['ar', 'en'].includes(patch.default_language)) throw new HttpError(400, 'INVALID_LANGUAGE', 'اللغة الافتراضية يجب أن تكون ar أو en');
+    out.default_language = patch.default_language;
   }
   await db.set('platform_settings', 'default', { ...out, updated_at: Date.now() });
   return out;

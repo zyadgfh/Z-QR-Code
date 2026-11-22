@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { NavLink, Navigate, Outlet, useNavigate } from 'react-router-dom';
+import { useTheme, type Theme } from '../../lib/theme';
+import { Segmented } from '../../components/ui';
+import { toast } from '../../lib/toast';
 import { useAuth, Membership } from '../../stores/auth';
 import { useDashLang, useDocDir } from '../../stores/dashlang';
 import { dashT } from '../../lib/i18n';
@@ -97,6 +100,7 @@ export default function DashLayout() {
           >
             {lang === 'ar' ? 'EN' : 'ع'}
           </button>
+          <ThemeSwitcher lang={lang} />
           <button onClick={() => { logout(); navigate('/dash/login'); }} className="rounded-full px-3 py-1.5 text-xs font-bold text-stone-400 transition hover:bg-black/5">
             {t('logout')}
           </button>
@@ -205,4 +209,25 @@ function RenewCard({ mem }: { mem: Membership }) {
 
 function Center({ children }: { children: React.ReactNode }) {
   return <div className="flex min-h-dvh flex-col items-center justify-center gap-3 p-6 text-center">{children}</div>;
+}
+
+
+/** مبدّل المظهر (D7): فاتح / داكن / حسب النظام — محفوظ ويُطبق فورًا */
+function ThemeSwitcher({ lang }: { lang: 'ar' | 'en' }) {
+  const theme = useTheme((s) => s.theme);
+  const setTheme = useTheme((s) => s.setTheme);
+  return (
+    <Segmented<Theme>
+      value={theme}
+      onChange={(t) => {
+        setTheme(t);
+        toast(lang === 'ar' ? (t === 'dark' ? 'الوضع الداكن مفعّل' : t === 'light' ? 'الوضع الفاتح مفعّل' : 'حسب إعداد نظامك') : (t === 'dark' ? 'Dark mode on' : t === 'light' ? 'Light mode on' : 'Following your system'));
+      }}
+      options={[
+        { value: 'light', label: '☀', title: lang === 'ar' ? 'فاتح' : 'Light' },
+        { value: 'dark', label: '🌙', title: lang === 'ar' ? 'داكن' : 'Dark' },
+        { value: 'system', label: '🖥', title: lang === 'ar' ? 'حسب النظام' : 'System' },
+      ]}
+    />
+  );
 }

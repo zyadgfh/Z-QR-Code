@@ -6,6 +6,7 @@ import { compressImage } from '../../lib/img';
 import { Btn, Chip, Err, Field, Input, Label, Modal, Ok, Select, Spinner } from '../../components/ui';
 import { fadeInUp, popIn } from '../../lib/anim';
 import ImportCsv from './ImportCsv';
+import { toast } from '../../lib/toast';
 
 type Opt = { id: string; name: string; name_en: string | null; price_delta: number };
 type Group = { id: string; name: string; name_en: string | null; selection: 'single' | 'multi'; required: boolean; options: Opt[] };
@@ -250,6 +251,7 @@ function ItemEditor({ item, categoryId, onClose, onSaved }: { item: Item | null;
       if (!id) return;
       const r = await api<{ photo_url: string }>(`/api/shop/items/${id}/generate-image`, { method: 'POST' });
       setPhotoUrl(r.photo_url);
+      toast(t('aiPhotoDone'));
       await onSaved();
     } catch (e: any) {
       setError(e.message);

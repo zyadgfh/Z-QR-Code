@@ -25,7 +25,11 @@ type AdminShop = {
   archived?: boolean;
 };
 
-type PlatformSettings = { monthly_price: number; payment_instructions: string; free_item_limit?: number; free_order_limit?: number };
+type PlatformSettings = { monthly_price: number; payment_instructions: string; free_item_limit?: number; free_order_limit?: number; platform_name?: string;
+  platform_description?: string;
+  support_email?: string;
+  default_language?: 'ar' | 'en';
+};
 
 type Overview = {
   shops_total: number;
@@ -320,6 +324,36 @@ export default function AdminPanel() {
           <div className="space-y-4">
             {settings && (
               <>
+                <Card data-card>
+                  <CardHead icon="🌐" title={t('platformGeneral')} desc={t('platformGeneralDesc')} />
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <Field label={t('platformName')}>
+                      <Input value={settings.platform_name ?? ''} onChange={(e) => setSettings({ ...settings, platform_name: e.target.value })} />
+                    </Field>
+                    <Field label={t('supportEmail')}>
+                      <Input dir="ltr" type="email" value={settings.support_email ?? ''} onChange={(e) => setSettings({ ...settings, support_email: e.target.value })} />
+                    </Field>
+                    <Field label={t('platformDesc')}>
+                      <Textarea value={settings.platform_description ?? ''} onChange={(e) => setSettings({ ...settings, platform_description: e.target.value.slice(0, 300) })} rows={2} />
+                    </Field>
+                    <Field label={t('defaultLanguage')}>
+                      <Select value={settings.default_language ?? 'ar'} onChange={(e) => setSettings({ ...settings, default_language: e.target.value as 'ar' | 'en' })}>
+                        <option value="ar">العربية</option>
+                        <option value="en">English</option>
+                      </Select>
+                    </Field>
+                  </div>
+                  <div className="mt-4 flex items-center gap-2">
+                    <Btn
+                      onClick={() => saveSection('general', { platform_name: settings.platform_name ?? '', platform_description: settings.platform_description ?? '', support_email: settings.support_email ?? '', default_language: settings.default_language ?? 'ar' })}
+                      disabled={secBusy === 'general'}
+                    >
+                      {secBusy === 'general' ? '…' : t('saveThisSection')}
+                    </Btn>
+                    {secSaved === 'general' && <Ok>{t('saved')}</Ok>}
+                  </div>
+                </Card>
+
                 <Card data-card>
                   <CardHead icon="💳" title={t('settingsBilling')} desc={t('settingsBillingDesc')} />
                   <div className="grid gap-4 sm:grid-cols-[200px_1fr]">

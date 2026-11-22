@@ -114,3 +114,39 @@ test('إعادة تعيين كلمة مرور المالك: مولّدة تعم�
   const login2 = await api(base, '/api/auth/login', { method: 'POST', body: { email: 'owner@nile.app', password: 'newpass123' } });
   assert.equal(login2.status, 200);
 });
+
+// ================= D7: هوية المنصة العامة =================
+
+test('D7: إعدادات المنصة العامة — حفظ جزئي متحقق ورفض المدخلات الرديئة', async () => {
+  const { base } = await startServer();
+  const a = await admin(base);
+
+  // القيم الافتراضية
+  const s0 = (await api(base, '/api/admin/settings', { token: a })).json;
+  assert.equal(s0.platform_name, 'QR Menu');
+  assert.equal(s0.default_language, 'ar');
+
+  // حفظ جزئي لا يمس البقية
+  const put = await api(base, '/api/admin/settings', { token: a, method: 'PUT', body: { platform_name: 'ز-كوبون' } });
+  assert.equal(put.status, 200);
+  assert.equal(put.json.platform_name, 'ز-كوبون');
+  assert.equal(put.json.monthly_price, 300); // لم يُمس
+  assert.equal(put.json.platform_description.length > 0, true); // الافتراضي بقي
+
+  // حفظ كامل للحقول الجديدة
+  const put2 = await api(base, '/api/admin/settings', { token: a, method: 'PUT', body: { platform_description: 'منصتنا', support_email: 'help@qrmenu.app', default_language: 'en' } });
+  assert.equal(put2.status, 200);
+  assert.equal(put2.json.support_email, 'help@qrmenu.app');
+  assert.equal(put2.json.default_language, 'en');
+  const s1 = (await api(base, '/api/admin/settings', { token: a })).json;
+  assert.equal(s1.platform_name, 'ز-كوبون');
+
+  // رفض: بريد رديء، لغة غير معروفة، اسم قصير جدًا
+  assert.equal((await api(base, '/api/admin/settings', { token: a, method: 'PUT', body: { support_email: 'not-an-email' } })).status, 400);
+  assert.equal((await api(base, '/api/admin/settings', { token: a, method: 'PUT', body: { default_language: 'fr' } })).status, 400);
+  assert.equal((await api(base, '/api/admin/settings', { token: a, method: 'PUT', body: { platform_name: 'x' } })).status, 400);
+
+  // المالك لا يعدل إعدادات المنصة
+  const o = await owner(base);
+  assert.equal((await api(base, '/api/admin/settings', { token: o, method: 'PUT', body: { platform_name: 'هاك' } })).status, 403);
+});

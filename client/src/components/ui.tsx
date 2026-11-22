@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { shake, sheetIn } from '../lib/anim';
+import { popIn, shake, sheetIn } from '../lib/anim';
+import { useToasts } from '../lib/toast';
 
 /**
  * نظام مكونات واجهة بلغة تصميم آبل: أسطح بيضاء بظل ناعم، ضغطة زر مرنة،
@@ -180,6 +181,92 @@ export function Ok({ children }: { children: React.ReactNode }) {
     <div className="inline-flex items-center gap-1.5 rounded-2xl bg-green-50 px-3.5 py-2.5 text-sm font-bold text-green-700">
       <span className="text-green-600">✓</span>
       {children}
+    </div>
+  );
+}
+
+// ================= مكونات نظام التصميم المضافة (D7) =================
+
+/** مفتاح تبديل بنمط iOS — حالات كاملة: تركيز/تعطيل/انتقال */
+export function Switch({ checked, onChange, disabled, label }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label?: string }) {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      aria-label={label}
+      disabled={disabled}
+      onClick={() => onChange(!checked)}
+      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors duration-200 focus-visible:outline-2 focus-visible:outline-teal-600 disabled:opacity-50 ${checked ? 'bg-teal-600' : 'bg-stone-300'}`}
+    >
+      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform duration-200 ${checked ? 'left-[22px]' : 'left-0.5'}`} />
+    </button>
+  );
+}
+
+/** منتقي مقاطع بنمط macOS — للمظهر: فاتح/داكن/النظام */
+export function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string; title?: string }[]; onChange: (v: T) => void }) {
+  return (
+    <div className="flex gap-0.5 rounded-full bg-stone-200/70 p-0.5" role="tablist">
+      {options.map((o) => (
+        <button
+          key={o.value}
+          role="tab"
+          aria-selected={value === o.value}
+          title={o.title || o.label}
+          onClick={() => onChange(o.value)}
+          className={`rounded-full px-2.5 py-1 text-xs font-extrabold transition-all active:scale-95 ${
+            value === o.value ? 'bg-white text-stone-900 shadow-sm' : 'text-stone-500 hover:text-stone-700'
+          }`}
+        >
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** حالة فراغ بهيكل واضح — بديل الجُمل الرمادية المتناثرة */
+export function EmptyState({ icon, title, desc }: { icon: string; title: string; desc?: string }) {
+  return (
+    <div className="flex flex-col items-center justify-center gap-1.5 py-10 text-center">
+      <span className="text-3xl opacity-70">{icon}</span>
+      <p className="text-sm font-extrabold text-stone-600">{title}</p>
+      {desc && <p className="max-w-xs text-xs font-bold text-stone-400">{desc}</p>}
+    </div>
+  );
+}
+
+/** هيكل تحميل ناعم — بديل الـSpinners المحيطية */
+export function Skeleton({ className = '' }: { className?: string }) {
+  return <div className={`animate-pulse rounded-2xl bg-stone-200/80 ${className}`} />;
+}
+
+/** حاوية الإشعارات الفورية — تُركَّب مرة واحدة في الجذر */
+export function Toaster() {
+  const items = useToasts((s) => s.items);
+  const dismiss = useToasts((s) => s.dismiss);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (ref.current) popIn(ref.current);
+  }, [items.length]);
+  if (items.length === 0) return null;
+  return (
+    <div className="pointer-events-none fixed inset-x-0 top-3 z-[80] mx-auto flex max-w-md flex-col items-center gap-2 px-4">
+      {items.map((t) => (
+        <div
+          key={t.id}
+          ref={ref}
+          onClick={() => dismiss(t.id)}
+          className={`pointer-events-auto flex w-full cursor-pointer items-center gap-2 rounded-2xl px-4 py-2.5 text-sm font-extrabold shadow-apple backdrop-blur ${
+            t.kind === 'error' ? 'bg-red-600/95 text-white' : t.kind === 'info' ? 'bg-stone-800/95 text-white' : 'bg-teal-700/95 text-white'
+          }`}
+          dir="auto"
+        >
+          <span>{t.kind === 'error' ? '⚠️' : t.kind === 'info' ? 'ℹ️' : '✓'}</span>
+          <span className="min-w-0 flex-1">{t.msg}</span>
+        </div>
+      ))}
     </div>
   );
 }

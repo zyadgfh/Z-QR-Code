@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { useEffect, useState } from 'react';
+import { api } from '../lib/api';
 import type { Lang } from '../lib/i18n';
 
 /** صفحات قانونية عامة (D6): سياسة الخصوصية + الشروط والأحكام — عربي/إنجليزي */
@@ -7,6 +8,11 @@ export default function LegalPage() {
   const loc = useLocation();
   const kind: 'privacy' | 'terms' = loc.pathname.includes('terms') ? 'terms' : 'privacy';
   const [lang, setLang] = useState<Lang>((new URLSearchParams(loc.search).get('lang') as Lang) || 'ar');
+  // هوية المنصة الحية من إعدادات المنصة (D7) — بلا نصوص مقحرة
+  const [platform, setPlatform] = useState<{ name: string; description: string } | null>(null);
+  useEffect(() => {
+    api<{ name: string; description: string }>('/api/public/platform').then(setPlatform).catch(() => {});
+  }, []);
 
   useEffect(() => {
     document.documentElement.dir = lang === 'ar' ? 'rtl' : 'ltr';
@@ -45,7 +51,7 @@ export default function LegalPage() {
       </div>
 
       <p className="mt-6 text-center text-xs font-bold text-stone-400" dir="auto">
-        Z-QR-Code · {lang === 'ar' ? 'منصة قوائم المطاعم برمز QR' : 'QR menu platform'}
+        {platform ? `${platform.name} · ${platform.description || (lang === 'ar' ? 'منصة قوائم المطاعم برمز QR' : 'QR menu platform')}` : lang === 'ar' ? 'منصة قوائم المطاعم برمز QR' : 'QR menu platform'}
       </p>
     </div>
   );

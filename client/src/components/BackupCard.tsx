@@ -4,6 +4,7 @@ import { useAuth } from '../stores/auth';
 import { dashT } from '../lib/i18n';
 import { useDashLang } from '../stores/dashlang';
 import { Btn, Card, CardHead, Err, Ok } from './ui';
+import { toast } from '../lib/toast';
 
 /** النسخة الاحتياطية (D6): تنزيل JSON كامل للمحل — مالك فقط (الاستعادة لاحقًا) */
 export default function BackupCard() {
@@ -30,6 +31,7 @@ export default function BackupCard() {
       a.click();
       URL.revokeObjectURL(a.href);
       setDone(true);
+      toast(t('backupDoneToast'));
       setTimeout(() => setDone(false), 2500);
     } catch (e: any) {
       setError(e.message || 'error');
